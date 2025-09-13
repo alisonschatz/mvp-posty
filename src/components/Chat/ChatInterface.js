@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ChatHeader from './ChatHeader';
 import ChatMessages from './ChatMessages';
 import ChatInput from './ChatInput';
-import ImageSelector from '../ui/ImageSelector';
+import ImageSelector from '../UI/ImageSelector';
 import { conversationFlow } from '../../utils/conversationFlow';
 import { generateContent } from '../../services/aiService';
 

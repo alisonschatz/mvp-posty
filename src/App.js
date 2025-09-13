@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import HomeSection from './components/Home/HomeSection';
 import ChatInterface from './components/Chat/ChatInterface';
-import Notification from './components/ui/Notification';
+import Notification from './components/UI/Notification';
 
 function App() {
   const [currentView, setCurrentView] = useState('home'); // 'home' ou 'chat'

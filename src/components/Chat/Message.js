@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Bot, User, Eye, Copy, Sparkles, RefreshCw } from 'lucide-react';
-import PostPreviewModal from '../ui/PostPreviewModal';
+import PostPreviewModal from '../UI/PostPreviewModal';
 
 const Message = ({
   message,
