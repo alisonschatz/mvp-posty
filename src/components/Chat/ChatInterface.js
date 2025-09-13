@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ChatHeader from './ChatHeader';
 import ChatMessages from './ChatMessages';
 import ChatInput from './ChatInput';
-import ImageSelector from '../UI/ImageSelector';
+import ImageSelector from '../ui/ImageSelector';
 import { conversationFlow } from '../../utils/conversationFlow';
 import { generateContent } from '../../services/aiService';
 
@@ -14,6 +13,7 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
   const [isTyping, setIsTyping] = useState(false);
   const [selectedTones, setSelectedTones] = useState([]);
   const [generatedContent, setGeneratedContent] = useState('');
+  const [generatedPost, setGeneratedPost] = useState(null); // Armazena o objeto completo com content + imageDescription
   const [postImage, setPostImage] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [conversationData, setConversationData] = useState({});
@@ -27,6 +27,26 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
   };
   
   useEffect(scrollToBottom, [messages]);
+
+  // Função de upload de imagem com useCallback para evitar warning
+  const handleImageUpload = useCallback((event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPostImage(e.target.result);
+        showNotification('Imagem adicionada!');
+      };
+      reader.readAsDataURL(file);
+    }
+  }, [showNotification]);
+
+  // Configurar o file input - agora com dependência correta
+  useEffect(() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.onchange = handleImageUpload;
+    }
+  }, [fileInputRef, handleImageUpload]);
 
   // Inicializar chat
   useEffect(() => {
@@ -116,18 +136,30 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
       }]);
 
       try {
-        const content = await generateContent(conversationData);
-        setGeneratedContent(content);
+        const result = await generateContent(conversationData);
+        
+        // Verificar se a resposta é um objeto com content e imageDescription ou apenas string
+        if (typeof result === 'object' && result.content) {
+          setGeneratedPost(result); // Armazena o objeto completo
+          setGeneratedContent(result.content); // Armazena apenas o conteúdo para compatibilidade
+          console.log('📝 Post gerado com descrição de imagem:', result.imageDescription);
+        } else {
+          // Fallback para compatibilidade
+          const content = typeof result === 'string' ? result : result?.content || result;
+          setGeneratedContent(content);
+          setGeneratedPost({ content, imageDescription: null });
+        }
         
         setMessages(prev => [...prev.slice(0, -1), {
           id: Date.now(),
           type: 'ai',
           content: "🎉 **Seu post está pronto!**\n\nOlha só como ficou incrível:",
-          generatedPost: content
+          generatedPost: typeof result === 'object' ? result.content : result
         }]);
         
         showNotification('Post gerado com sucesso!');
       } catch (error) {
+        console.error('Erro ao gerar post:', error);
         setMessages(prev => [...prev.slice(0, -1), {
           id: Date.now(),
           type: 'ai', 
@@ -141,28 +173,9 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
     }, 2000);
   };
 
-  const handleImageUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPostImage(e.target.result);
-        showNotification('Imagem adicionada!');
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const restart = () => {
     onGoHome();
   };
-
-  // Configurar o file input
-  useEffect(() => {
-    if (fileInputRef.current) {
-      fileInputRef.current.onchange = handleImageUpload;
-    }
-  }, [fileInputRef]);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -215,9 +228,10 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
       {showImageSelector && (
         <ImageSelector
           conversationData={conversationData}
+          generatedContent={generatedPost} // Passa o objeto completo com imageDescription
           onImageSelect={(imageUrl) => {
             setPostImage(imageUrl);
-            showNotification('Imagem do Unsplash adicionada!');
+            showNotification('Imagem adicionada!');
             setShowImageSelector(false);
           }}
           onClose={() => setShowImageSelector(false)}

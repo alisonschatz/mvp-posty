@@ -1,22 +1,22 @@
-// Serviço de integração com Unsplash
+// Serviço Unsplash - Fotos profissionais gratuitas com busca inteligente
 const UNSPLASH_ACCESS_KEY = process.env.REACT_APP_UNSPLASH_ACCESS_KEY;
 const UNSPLASH_API_BASE = 'https://api.unsplash.com';
 
-// Buscar imagens baseadas no conteúdo do post
-export const searchImages = async (query, page = 1, perPage = 9) => {
+// Buscar imagens no Unsplash
+export const searchUnsplashImages = async (query, page = 1, perPage = 9) => {
   try {
     if (!UNSPLASH_ACCESS_KEY) {
-      console.warn('Chave do Unsplash não configurada, usando imagens placeholder');
+      console.warn('⚠️ Chave do Unsplash não configurada');
       return generatePlaceholderImages(query, perPage);
     }
 
-    const searchQuery = generateSearchQuery(query);
+    console.log('🔍 Buscando no Unsplash:', query);
+
     const response = await fetch(
-      `${UNSPLASH_API_BASE}/search/photos?query=${encodeURIComponent(searchQuery)}&page=${page}&per_page=${perPage}&orientation=squarish`,
+      `${UNSPLASH_API_BASE}/search/photos?query=${encodeURIComponent(query)}&page=${page}&per_page=${perPage}&orientation=squarish&order_by=relevance`,
       {
         headers: {
           'Authorization': `Client-ID ${UNSPLASH_ACCESS_KEY}`,
-          'Content-Type': 'application/json',
         },
       }
     );
@@ -27,143 +27,181 @@ export const searchImages = async (query, page = 1, perPage = 9) => {
 
     const data = await response.json();
     
+    const images = data.results.map(photo => ({
+      id: `unsplash-${photo.id}`,
+      urls: {
+        thumb: photo.urls.thumb,
+        small: photo.urls.small,
+        regular: photo.urls.regular,
+        full: photo.urls.full
+      },
+      alt: photo.alt_description || photo.description || `Foto relacionada a ${query}`,
+      user: {
+        name: photo.user.name,
+        username: photo.user.username,
+        profile: photo.user.links.html
+      },
+      downloadUrl: photo.links.download,
+      htmlUrl: photo.links.html,
+      source: 'unsplash'
+    }));
+
+    console.log('✅ Unsplash encontrou', images.length, 'imagens');
+
     return {
-      images: data.results.map(photo => ({
-        id: photo.id,
-        urls: {
-          thumb: photo.urls.thumb,
-          small: photo.urls.small,
-          regular: photo.urls.regular,
-          full: photo.urls.full
-        },
-        alt: photo.alt_description || photo.description || searchQuery,
-        user: {
-          name: photo.user.name,
-          username: photo.user.username,
-          profile: photo.user.links.html
-        },
-        downloadUrl: photo.links.download,
-        htmlUrl: photo.links.html
-      })),
+      images,
       total: data.total,
       totalPages: data.total_pages
     };
+
   } catch (error) {
-    console.error('Erro ao buscar imagens no Unsplash:', error);
+    console.error('❌ Erro ao buscar no Unsplash:', error);
     return generatePlaceholderImages(query, perPage);
   }
 };
 
-// Gerar query de busca inteligente baseada no conteúdo
-const generateSearchQuery = (content) => {
-  // Palavras-chave por categoria
-  const keywords = {
-    business: ['business', 'office', 'meeting', 'handshake', 'team', 'corporate'],
-    technology: ['technology', 'computer', 'smartphone', 'innovation', 'digital'],
-    lifestyle: ['lifestyle', 'people', 'happy', 'success', 'motivation'],
-    food: ['food', 'restaurant', 'cooking', 'delicious', 'chef'],
-    travel: ['travel', 'vacation', 'adventure', 'landscape', 'destination'],
-    fitness: ['fitness', 'workout', 'gym', 'health', 'exercise', 'sport'],
-    education: ['education', 'learning', 'books', 'student', 'knowledge'],
-    nature: ['nature', 'forest', 'mountains', 'ocean', 'landscape'],
-    creativity: ['art', 'creative', 'design', 'inspiration', 'colorful'],
-    social: ['people', 'community', 'friendship', 'social', 'together']
-  };
+// Sugerir imagens baseadas no conteúdo gerado
+export const suggestImagesForPost = async (conversationData) => {
+  const generatedContent = conversationData.generatedContent;
+  
+  // Verificar se temos a descrição da imagem do post gerado
+  let searchQuery = '';
+  
+  if (generatedContent && typeof generatedContent === 'object' && generatedContent.imageDescription) {
+    // Usar a descrição da imagem como base
+    searchQuery = convertImageDescriptionToSearchQuery(generatedContent.imageDescription);
+    console.log('🎯 Busca baseada na descrição da imagem:', searchQuery);
+  } else {
+    // Fallback: gerar query baseada no conteúdo textual
+    const content = typeof generatedContent === 'string' 
+      ? generatedContent 
+      : generatedContent?.content || conversationData.content || '';
+    searchQuery = generateIntelligentQuery(content, conversationData);
+    console.log('🔄 Busca baseada no conteúdo textual:', searchQuery);
+  }
+  
+  return await searchUnsplashImages(searchQuery, 1, 6);
+};
 
+// Converter descrição de imagem para query de busca otimizada
+const convertImageDescriptionToSearchQuery = (imageDescription) => {
+  if (!imageDescription || typeof imageDescription !== 'string') {
+    return 'business professional';
+  }
+  
+  // Extrair palavras-chave principais da descrição
+  const keywordMappings = {
+    // Workspace
+    'workspace|desk|office|computer|laptop': 'workspace office',
+    'modern|contemporary|clean|minimalist': 'modern workspace',
+    'professional|business|corporate': 'professional business',
+    
+    // Objetos específicos
+    'coffee|cup|mug': 'coffee workspace',
+    'notebook|notes|planning': 'notebook planning',
+    'plants|green|nature': 'office plants',
+    'documents|papers|files': 'business documents',
+    
+    // Iluminação e atmosfera
+    'natural lighting|window|bright': 'natural light office',
+    'warm|cozy|comfortable': 'cozy workspace',
+    'organized|neat|tidy': 'organized office',
+    
+    // Tecnologia
+    'technology|digital|screens': 'technology office',
+    'smartphone|phone|mobile': 'mobile technology',
+    'innovation|futuristic': 'innovation technology',
+    
+    // Cores e estética
+    'white|light|bright': 'bright office',
+    'wood|wooden|natural': 'wooden desk office',
+    'black|dark|contrast': 'modern office',
+    
+    // Atividades
+    'meeting|collaboration|team': 'business meeting',
+    'presentation|display|screen': 'business presentation',
+    'creative|design|art': 'creative workspace',
+    'learning|education|study': 'study workspace'
+  };
+  
+  const description_lower = imageDescription.toLowerCase();
+  let matchedTerms = [];
+  
+  for (const [patterns, searchTerm] of Object.entries(keywordMappings)) {
+    const regex = new RegExp(patterns, 'i');
+    if (regex.test(description_lower)) {
+      matchedTerms.push(searchTerm);
+    }
+  }
+  
+  // Se encontrou termos específicos, usar os mais relevantes
+  if (matchedTerms.length > 0) {
+    // Remover duplicatas e pegar os 2 primeiros
+    const uniqueTerms = [...new Set(matchedTerms)].slice(0, 2);
+    return uniqueTerms.join(' ');
+  }
+  
+  // Fallback: extrair palavras-chave diretamente
+  const importantWords = imageDescription
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '') // Remove pontuação
+    .split(' ')
+    .filter(word => word.length > 3) // Palavras com mais de 3 caracteres
+    .filter(word => !['with', 'and', 'the', 'for', 'that', 'this', 'from', 'they', 'have', 'been', 'their', 'said', 'each', 'which', 'she', 'do', 'how', 'her', 'has', 'him'].includes(word)); // Remove stop words
+  
+  // Pegar as 3 primeiras palavras relevantes
+  const keywords = importantWords.slice(0, 3).join(' ');
+  
+  return keywords || 'business professional';
+};
+
+// Gerar query inteligente baseada no conteúdo textual (fallback)
+const generateIntelligentQuery = (content, conversationData) => {
+  const businessKeywords = {
+    'tecnologia|digital|software': 'technology business',
+    'marketing|vendas|cliente': 'marketing team',
+    'equipe|time|colaboração': 'team collaboration',
+    'liderança|gestão|CEO': 'leadership business',
+    'sucesso|crescimento': 'success achievement',
+    'produtividade|trabalho': 'productivity workspace',
+    'educação|aprendizado': 'education learning',
+    'finanças|investimento': 'finance business'
+  };
+  
   const content_lower = content.toLowerCase();
   
-  // Detectar categoria baseada no conteúdo
-  let detectedCategory = 'lifestyle'; // default
-  let maxMatches = 0;
-  
-  Object.entries(keywords).forEach(([category, words]) => {
-    const matches = words.filter(word => content_lower.includes(word)).length;
-    if (matches > maxMatches) {
-      maxMatches = matches;
-      detectedCategory = category;
+  for (const [pattern, term] of Object.entries(businessKeywords)) {
+    if (new RegExp(pattern, 'i').test(content_lower)) {
+      return term;
     }
-  });
-
-  // Extrair palavras-chave específicas do conteúdo
-  const specificKeywords = extractKeywords(content);
-  
-  // Combinar categoria detectada com palavras específicas
-  const categoryKeywords = keywords[detectedCategory];
-  const finalQuery = specificKeywords.length > 0 
-    ? `${specificKeywords.join(' ')} ${categoryKeywords[0]}` 
-    : categoryKeywords[Math.floor(Math.random() * categoryKeywords.length)];
-
-  return finalQuery;
-};
-
-// Extrair palavras-chave relevantes do conteúdo
-const extractKeywords = (content) => {
-  // Palavras irrelevantes a serem ignoradas
-  const stopWords = [
-    'o', 'a', 'os', 'as', 'um', 'uma', 'de', 'do', 'da', 'dos', 'das',
-    'em', 'no', 'na', 'nos', 'nas', 'por', 'para', 'com', 'sem', 'sobre',
-    'que', 'quem', 'qual', 'quando', 'onde', 'como', 'por que', 'porque',
-    'e', 'ou', 'mas', 'então', 'se', 'caso', 'embora', 'ainda', 'já',
-    'muito', 'mais', 'menos', 'bem', 'mal', 'melhor', 'pior', 'grande',
-    'pequeno', 'novo', 'velho', 'bom', 'ruim', 'the', 'and', 'or', 'but',
-    'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was',
-    'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did'
-  ];
-
-  // Extrair palavras significativas
-  const words = content
-    .toLowerCase()
-    .replace(/[^\w\s]/g, ' ')
-    .split(/\s+/)
-    .filter(word => 
-      word.length > 3 && 
-      !stopWords.includes(word) &&
-      !/^\d+$/.test(word) // Remove números
-    );
-
-  // Contar frequência e pegar as mais relevantes
-  const wordCount = {};
-  words.forEach(word => {
-    wordCount[word] = (wordCount[word] || 0) + 1;
-  });
-
-  return Object.entries(wordCount)
-    .sort(([,a], [,b]) => b - a)
-    .slice(0, 3)
-    .map(([word]) => word);
-};
-
-// Gerar imagens placeholder quando a API não está disponível
-const generatePlaceholderImages = (query, count) => {
-  const placeholderTopics = [
-    'business-team', 'technology', 'success', 'creativity', 'innovation',
-    'marketing', 'social-media', 'growth', 'inspiration', 'motivation'
-  ];
-  
-  const images = [];
-  for (let i = 0; i < count; i++) {
-    const topic = placeholderTopics[i % placeholderTopics.length];
-    const id = `placeholder-${i}`;
-    
-    images.push({
-      id,
-      urls: {
-        thumb: `https://picsum.photos/150/150?random=${id}`,
-        small: `https://picsum.photos/300/300?random=${id}`,
-        regular: `https://picsum.photos/600/600?random=${id}`,
-        full: `https://picsum.photos/1200/1200?random=${id}`
-      },
-      alt: `Imagem relacionada a ${query}`,
-      user: {
-        name: 'Placeholder Image',
-        username: 'placeholder',
-        profile: '#'
-      },
-      downloadUrl: `https://picsum.photos/1200/1200?random=${id}`,
-      htmlUrl: '#',
-      isPlaceholder: true
-    });
   }
+  
+  return 'business professional';
+};
+
+// Gerar imagens placeholder
+const generatePlaceholderImages = (query, count) => {
+  console.log('📦 Gerando placeholders para:', query);
+  
+  const images = Array.from({ length: count }, (_, i) => ({
+    id: `placeholder-${Date.now()}-${i}`,
+    urls: {
+      thumb: `https://picsum.photos/150/150?random=${query}${i}`,
+      small: `https://picsum.photos/300/300?random=${query}${i}`,
+      regular: `https://picsum.photos/600/600?random=${query}${i}`,
+      full: `https://picsum.photos/1200/1200?random=${query}${i}`
+    },
+    alt: `Imagem placeholder relacionada a ${query}`,
+    user: {
+      name: 'Placeholder Image',
+      username: 'placeholder',
+      profile: '#'
+    },
+    downloadUrl: `https://picsum.photos/1200/1200?random=${query}${i}`,
+    htmlUrl: '#',
+    source: 'unsplash',
+    isPlaceholder: true
+  }));
 
   return {
     images,
@@ -172,15 +210,13 @@ const generatePlaceholderImages = (query, count) => {
   };
 };
 
-// Fazer download de uma imagem (trackear no Unsplash se for real)
-export const downloadImage = async (photo) => {
+// Download com tracking
+export const downloadUnsplashImage = async (photo) => {
   if (photo.isPlaceholder) {
-    // Para placeholders, apenas retorna a URL
     return photo.urls.regular;
   }
 
   try {
-    // Triggerar download tracking no Unsplash
     if (UNSPLASH_ACCESS_KEY && photo.downloadUrl) {
       await fetch(photo.downloadUrl, {
         headers: {
@@ -191,46 +227,7 @@ export const downloadImage = async (photo) => {
     
     return photo.urls.regular;
   } catch (error) {
-    console.error('Erro ao fazer download da imagem:', error);
+    console.error('❌ Erro no download:', error);
     return photo.urls.regular;
   }
-};
-
-// Sugerir imagens baseadas nos dados da conversa
-export const suggestImagesForPost = async (conversationData) => {
-  // Construir query baseada no contexto completo
-  let searchTerms = [];
-  
-  // Adicionar palavras do conteúdo principal
-  if (conversationData.content) {
-    searchTerms.push(conversationData.content);
-  }
-  
-  // Adicionar contexto do objetivo
-  if (conversationData.objective) {
-    const objectiveKeywords = {
-      '💰 Vender produto/serviço': 'product marketing sales business',
-      '💬 Aumentar engajamento': 'community social engagement people',
-      '📢 Educar audiência': 'education learning knowledge books',
-      '✨ Inspirar pessoas': 'inspiration motivation success dreams',
-      '🔥 Criar buzz': 'trending viral excitement energy'
-    };
-    searchTerms.push(objectiveKeywords[conversationData.objective] || '');
-  }
-  
-  // Adicionar contexto da plataforma
-  const platformContext = {
-    '📸 Instagram': 'aesthetic beautiful lifestyle',
-    '👥 Facebook': 'community family friends social',
-    '💼 LinkedIn': 'professional business corporate',
-    '🐦 Twitter': 'news trending discussion'
-  };
-  
-  if (conversationData.platform) {
-    searchTerms.push(platformContext[conversationData.platform] || '');
-  }
-  
-  const finalQuery = searchTerms.join(' ').trim() || 'business success';
-  
-  return await searchImages(finalQuery, 1, 9);
 };
