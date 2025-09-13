@@ -1,251 +1,468 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Download, ExternalLink, RefreshCw, Loader } from 'lucide-react';
-import { suggestImagesForPost, searchImages, downloadImage } from '../../services/unsplashService';
+import { X, Search, Download, Sparkles, Camera, Palette, Zap, Loader } from 'lucide-react';
 
-const ImageSelector = ({ conversationData, onImageSelect, onClose }) => {
-  const [images, setImages] = useState([]);
-  const [loading, setLoading] = useState(true);
+// Importações dos serviços
+import { searchPexelsImages } from '../../services/pexelsService';
+import { suggestImagesForPost as searchUnsplash } from '../../services/unsplashService';
+import { generateDalleImages } from '../../services/dalleService';
+
+const ImageSelector = ({ conversationData, generatedContent, onImageSelect, onClose }) => {
+  // Estados principais
+  const [activeTab, setActiveTab] = useState('photos'); // 'photos' ou 'ai'
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [searching, setSearching] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  
+  // Estados para fotos
+  const [photos, setPhotos] = useState([]);
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [activeSource, setActiveSource] = useState('all'); // 'all', 'pexels', 'unsplash'
+  
+  // Estados para IA
+  const [aiImages, setAiImages] = useState([]);
+  const [aiLoading, setAiLoading] = useState(false);
 
-  // Carregar sugestões iniciais baseadas na conversa
+  // Carregar fotos iniciais
   useEffect(() => {
-    loadInitialSuggestions();
-  }, [conversationData]);
+    loadSuggestedPhotos();
+  }, []);
 
-  const loadInitialSuggestions = async () => {
-    setLoading(true);
+  // Gerar termo de busca inteligente
+  const generateSearchTerm = () => {
+    const content = generatedContent || conversationData.content || '';
+    
+    const keywords = {
+      'tecnologia|digital|software|app': 'technology workspace',
+      'marketing|vendas|negócio': 'business marketing',
+      'equipe|time|colaboração': 'team collaboration',
+      'liderança|gestão|CEO': 'leadership business',
+      'sucesso|crescimento|resultado': 'success achievement',
+      'produtividade|organização': 'productivity workspace',
+      'educação|aprendizado|curso': 'education learning',
+      'finanças|investimento|dinheiro': 'finance business'
+    };
+    
+    for (const [pattern, term] of Object.entries(keywords)) {
+      if (new RegExp(pattern, 'i').test(content)) {
+        return term;
+      }
+    }
+    
+    return 'business professional';
+  };
+
+  // Carregar fotos sugeridas
+  const loadSuggestedPhotos = async () => {
+    setPhotosLoading(true);
     try {
-      const result = await suggestImagesForPost(conversationData);
-      setImages(result.images);
-      setTotalPages(result.totalPages);
+      const searchTerm = generateSearchTerm();
+      console.log('🔍 Buscando fotos para:', searchTerm);
+      
+      const [pexelsResult, unsplashResult] = await Promise.allSettled([
+        searchPexelsImages(searchTerm, 1, 6),
+        searchUnsplash({ ...conversationData, generatedContent })
+      ]);
+
+      let allPhotos = [];
+      
+      if (pexelsResult.status === 'fulfilled' && pexelsResult.value.images) {
+        allPhotos.push(...pexelsResult.value.images.slice(0, 6));
+      }
+      
+      if (unsplashResult.status === 'fulfilled' && unsplashResult.value.images) {
+        allPhotos.push(...unsplashResult.value.images.slice(0, 3));
+      }
+      
+      setPhotos(allPhotos);
+      console.log('✅ Carregadas', allPhotos.length, 'fotos');
     } catch (error) {
-      console.error('Erro ao carregar sugestões:', error);
+      console.error('Erro ao carregar fotos:', error);
+      setPhotos([]);
     } finally {
-      setLoading(false);
+      setPhotosLoading(false);
     }
   };
 
-  const handleSearch = async (query = searchQuery, page = 1) => {
-    if (!query.trim()) return;
+  // Buscar fotos manualmente
+  const searchPhotos = async () => {
+    if (!searchQuery.trim()) return;
     
-    setSearching(true);
+    setPhotosLoading(true);
     try {
-      const result = await searchImages(query, page, 9);
-      if (page === 1) {
-        setImages(result.images);
-      } else {
-        setImages(prev => [...prev, ...result.images]);
+      const [pexelsResult, unsplashResult] = await Promise.allSettled([
+        searchPexelsImages(searchQuery, 1, 6),
+        searchUnsplash({ content: searchQuery })
+      ]);
+
+      let searchResults = [];
+      
+      if (pexelsResult.status === 'fulfilled' && pexelsResult.value.images) {
+        searchResults.push(...pexelsResult.value.images);
       }
-      setTotalPages(result.totalPages);
-      setCurrentPage(page);
+      
+      if (unsplashResult.status === 'fulfilled' && unsplashResult.value.images) {
+        searchResults.push(...unsplashResult.value.images);
+      }
+      
+      setPhotos(searchResults);
     } catch (error) {
       console.error('Erro na busca:', error);
+      setPhotos([]);
     } finally {
-      setSearching(false);
+      setPhotosLoading(false);
     }
   };
 
-  const handleLoadMore = () => {
-    if (currentPage < totalPages && !searching) {
-      handleSearch(searchQuery, currentPage + 1);
+  // Gerar imagens com IA
+  const generateAI = async () => {
+    setAiLoading(true);
+    try {
+      console.log('🤖 Gerando imagens com DALL-E...');
+      const result = await generateDalleImages(
+        generatedContent || conversationData.content,
+        conversationData,
+        2
+      );
+      
+      setAiImages(result.images || []);
+      console.log('✅ Geradas', result.images?.length || 0, 'imagens');
+    } catch (error) {
+      console.error('Erro ao gerar IA:', error);
+      setAiImages([]);
+    } finally {
+      setAiLoading(false);
     }
   };
 
-  const handleImageSelect = async (image) => {
+  // Selecionar imagem
+  const selectImage = async (image) => {
     setSelectedImage(image);
     try {
-      const imageUrl = await downloadImage(image);
-      
-      // Converter para blob/base64 para usar no preview
-      const response = await fetch(imageUrl);
+      // Fazer download da imagem
+      const response = await fetch(image.urls.regular || image.urls.small);
       const blob = await response.blob();
-      const reader = new FileReader();
       
+      // Converter para base64
+      const reader = new FileReader();
       reader.onload = () => {
         onImageSelect(reader.result);
         onClose();
       };
-      
       reader.readAsDataURL(blob);
     } catch (error) {
-      console.error('Erro ao selecionar imagem:', error);
+      console.error('Erro ao processar imagem:', error);
       // Fallback: usar URL diretamente
-      onImageSelect(image.urls.regular);
+      onImageSelect(image.urls.regular || image.urls.small);
       onClose();
     } finally {
       setSelectedImage(null);
     }
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      setCurrentPage(1);
-      handleSearch(searchQuery, 1);
-    }
+  // Filtrar fotos por fonte
+  const filteredPhotos = photos.filter(photo => {
+    if (activeSource === 'all') return true;
+    return photo.source === activeSource;
+  });
+
+  // Obter badge da fonte
+  const getSourceBadge = (source) => {
+    const badges = {
+      pexels: { text: 'Pexels', color: 'bg-green-500' },
+      unsplash: { text: 'Unsplash', color: 'bg-blue-500' },
+      dalle: { text: 'DALL-E', color: 'bg-purple-500' }
+    };
+    return badges[source] || { text: 'Foto', color: 'bg-gray-500' };
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        
         {/* Header */}
-        <div className="border-b border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-900">Escolher Imagem</h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-          
-          {/* Search bar */}
-          <div className="flex gap-3">
-            <div className="flex-1 relative">
-              <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Buscar imagens... (ex: negócios, tecnologia, pessoas)"
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              />
-            </div>
-            <button
-              onClick={() => handleSearch(searchQuery, 1)}
-              disabled={searching || !searchQuery.trim()}
-              className="bg-orange-500 text-white px-6 py-3 rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {searching ? (
-                <Loader className="w-5 h-5 animate-spin" />
-              ) : (
-                <Search className="w-5 h-5" />
-              )}
-              Buscar
-            </button>
-            <button
-              onClick={loadInitialSuggestions}
-              disabled={loading}
-              className="bg-gray-500 text-white px-4 py-3 rounded-xl hover:bg-gray-600 transition-colors disabled:opacity-50"
-              title="Sugestões baseadas no seu post"
-            >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
+        <div className="flex items-center justify-between p-6 border-b">
+          <h2 className="text-2xl font-bold text-gray-900">Escolher Imagem</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+            <X className="w-6 h-6 text-gray-400" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b">
+          <button
+            onClick={() => setActiveTab('photos')}
+            className={`flex-1 py-4 px-6 font-medium ${
+              activeTab === 'photos'
+                ? 'border-b-2 border-orange-500 text-orange-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Camera className="w-5 h-5 inline mr-2" />
+            Fotos Reais (Grátis)
+          </button>
+          <button
+            onClick={() => setActiveTab('ai')}
+            className={`flex-1 py-4 px-6 font-medium ${
+              activeTab === 'ai'
+                ? 'border-b-2 border-purple-500 text-purple-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Sparkles className="w-5 h-5 inline mr-2" />
+            Gerar com IA (Pago)
+          </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <Loader className="w-8 h-8 animate-spin text-orange-500 mx-auto mb-4" />
-                <p className="text-gray-600">Carregando sugestões para seu post...</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              {images.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-gray-500 mb-4">Nenhuma imagem encontrada</p>
+        <div className="p-6">
+          
+          {/* Aba Fotos */}
+          {activeTab === 'photos' && (
+            <div>
+              {/* Busca e filtros */}
+              <div className="mb-6">
+                <div className="flex gap-3 mb-4">
+                  <div className="flex-1 relative">
+                    <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && searchPhotos()}
+                      placeholder="Buscar fotos... (ex: negócios, tecnologia)"
+                      className="w-full pl-10 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
                   <button
-                    onClick={loadInitialSuggestions}
-                    className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors"
+                    onClick={searchPhotos}
+                    disabled={photosLoading || !searchQuery.trim()}
+                    className="bg-orange-500 text-white px-6 py-3 rounded-xl hover:bg-orange-600 disabled:opacity-50"
                   >
-                    Ver Sugestões
+                    {photosLoading ? <Loader className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                  </button>
+                  <button
+                    onClick={loadSuggestedPhotos}
+                    disabled={photosLoading}
+                    className="bg-gray-500 text-white px-4 py-3 rounded-xl hover:bg-gray-600 disabled:opacity-50"
+                    title="Sugestões baseadas no conteúdo"
+                  >
+                    <Sparkles className="w-5 h-5" />
                   </button>
                 </div>
-              ) : (
-                <>
-                  {/* Grid de imagens */}
-                  <div className="grid grid-cols-3 gap-4 mb-6">
-                    {images.map((image) => (
-                      <div
-                        key={image.id}
-                        className="relative group cursor-pointer bg-gray-100 rounded-lg overflow-hidden aspect-square"
-                        onClick={() => handleImageSelect(image)}
-                      >
-                        <img
-                          src={image.urls.small}
-                          alt={image.alt}
-                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                          loading="lazy"
-                        />
-                        
-                        {/* Overlay com informações */}
-                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-end">
-                          <div className="text-white p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <p className="text-sm font-medium truncate">{image.alt}</p>
-                            {!image.isPlaceholder && (
-                              <p className="text-xs opacity-75">por {image.user.name}</p>
-                            )}
+
+                {/* Filtros de fonte */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setActiveSource('all')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                      activeSource === 'all'
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Todas
+                  </button>
+                  <button
+                    onClick={() => setActiveSource('pexels')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                      activeSource === 'pexels'
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Camera className="w-4 h-4 inline mr-1" />
+                    Pexels
+                  </button>
+                  <button
+                    onClick={() => setActiveSource('unsplash')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                      activeSource === 'unsplash'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Palette className="w-4 h-4 inline mr-1" />
+                    Unsplash
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid de fotos */}
+              <div className="max-h-96 overflow-y-auto">
+                {photosLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <div className="text-center">
+                      <Loader className="w-8 h-8 animate-spin text-orange-500 mx-auto mb-4" />
+                      <p className="text-gray-600">Buscando fotos...</p>
+                    </div>
+                  </div>
+                ) : filteredPhotos.length === 0 ? (
+                  <div className="text-center py-16">
+                    <Camera className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500 mb-4">Nenhuma foto encontrada</p>
+                    <button
+                      onClick={loadSuggestedPhotos}
+                      className="bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600"
+                    >
+                      Carregar Sugestões
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-4">
+                    {filteredPhotos.map((photo) => {
+                      const badge = getSourceBadge(photo.source);
+                      return (
+                        <div
+                          key={photo.id}
+                          onClick={() => selectImage(photo)}
+                          className="relative group cursor-pointer bg-gray-100 rounded-lg overflow-hidden aspect-square hover:shadow-lg transition-all"
+                        >
+                          <img
+                            src={photo.urls.small || photo.urls.thumb}
+                            alt={photo.alt}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                          
+                          {/* Badge */}
+                          <div className="absolute top-2 left-2">
+                            <span className={`${badge.color} text-white text-xs px-2 py-1 rounded-full`}>
+                              {badge.text}
+                            </span>
+                          </div>
+
+                          {/* Loading */}
+                          {selectedImage?.id === photo.id && (
+                            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                              <Loader className="w-6 h-6 text-white animate-spin" />
+                            </div>
+                          )}
+
+                          {/* Info hover */}
+                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all flex items-end">
+                            <div className="text-white p-3 opacity-0 group-hover:opacity-100 transition-opacity w-full">
+                              <p className="text-sm truncate">{photo.alt}</p>
+                              <p className="text-xs opacity-75">por {photo.user?.name}</p>
+                            </div>
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
-                        {/* Loading overlay quando selecionando */}
+          {/* Aba IA */}
+          {activeTab === 'ai' && (
+            <div>
+              {/* Info e geração */}
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 mb-6">
+                <div className="text-center">
+                  <Sparkles className="w-12 h-12 text-purple-600 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Imagens Personalizadas com IA</h3>
+                  <p className="text-gray-600 mb-4">
+                    DALL-E criará imagens únicas baseadas no seu conteúdo.
+                    <br />
+                    <span className="font-medium text-purple-600">Custo: ~$0.08 por geração (2 imagens)</span>
+                  </p>
+                  <button
+                    onClick={generateAI}
+                    disabled={aiLoading}
+                    className="bg-purple-600 text-white px-8 py-3 rounded-xl hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2 mx-auto"
+                  >
+                    {aiLoading ? (
+                      <>
+                        <Loader className="w-5 h-5 animate-spin" />
+                        Gerando...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-5 h-5" />
+                        Gerar Imagens (~$0.08)
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid de imagens IA */}
+              <div className="max-h-96 overflow-y-auto">
+                {aiLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <div className="text-center">
+                      <Loader className="w-8 h-8 animate-spin text-purple-500 mx-auto mb-4" />
+                      <p className="text-gray-600">Gerando imagens com IA...</p>
+                      <p className="text-sm text-gray-500 mt-2">Isso pode levar alguns segundos</p>
+                    </div>
+                  </div>
+                ) : aiImages.length === 0 ? (
+                  <div className="text-center py-16">
+                    <Sparkles className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500 mb-4">Nenhuma imagem gerada ainda</p>
+                    <p className="text-sm text-gray-400">Clique no botão acima para gerar</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4 justify-center max-w-lg mx-auto">
+                    {aiImages.map((image) => (
+                      <div
+                        key={image.id}
+                        onClick={() => selectImage(image)}
+                        className="relative group cursor-pointer bg-gray-100 rounded-lg overflow-hidden aspect-square hover:shadow-lg transition-all"
+                      >
+                        <img
+                          src={image.urls.regular}
+                          alt={image.alt}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        />
+                        
+                        {/* Badge IA */}
+                        <div className="absolute top-2 left-2">
+                          <span className="bg-purple-500 text-white text-xs px-2 py-1 rounded-full">
+                            🤖 IA
+                          </span>
+                        </div>
+
+                        {/* Loading */}
                         {selectedImage?.id === image.id && (
                           <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
                             <Loader className="w-6 h-6 text-white animate-spin" />
                           </div>
                         )}
 
-                        {/* Ícone de download */}
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="bg-white rounded-full p-1.5 shadow-lg">
-                            <Download className="w-4 h-4 text-gray-700" />
+                        {/* Info hover */}
+                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all flex items-end">
+                          <div className="text-white p-3 opacity-0 group-hover:opacity-100 transition-opacity w-full">
+                            <p className="text-sm">✨ Gerada por IA</p>
+                            <p className="text-xs opacity-75">Personalizada para seu conteúdo</p>
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
-
-                  {/* Botão carregar mais */}
-                  {currentPage < totalPages && (
-                    <div className="text-center">
-                      <button
-                        onClick={handleLoadMore}
-                        disabled={searching}
-                        className="bg-gray-500 text-white px-6 py-3 rounded-xl hover:bg-gray-600 transition-colors disabled:opacity-50 flex items-center gap-2 mx-auto"
-                      >
-                        {searching ? (
-                          <Loader className="w-5 h-5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-5 h-5" />
-                        )}
-                        Carregar Mais
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </>
+                )}
+              </div>
+            </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-100 p-4 bg-gray-50">
+        <div className="border-t bg-gray-50 p-4">
           <div className="flex items-center justify-between text-sm text-gray-600">
-            <p>
-              💡 <strong>Dica:</strong> Use palavras-chave específicas para melhores resultados
-            </p>
-            <div className="flex items-center gap-2">
+            <p>💡 {activeTab === 'photos' ? 'Use palavras específicas para melhores resultados' : 'IA cria imagens únicas para seu conteúdo'}</p>
+            <div className="flex items-center gap-4 text-xs">
               <span>Powered by</span>
-              <a 
-                href="https://unsplash.com" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-orange-500 hover:text-orange-600 flex items-center gap-1"
-              >
-                Unsplash <ExternalLink className="w-3 h-3" />
-              </a>
+              {activeTab === 'photos' ? (
+                <>
+                  <span className="text-green-600">Pexels</span>
+                  <span className="text-blue-600">Unsplash</span>
+                </>
+              ) : (
+                <span className="text-purple-600">DALL-E</span>
+              )}
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );
