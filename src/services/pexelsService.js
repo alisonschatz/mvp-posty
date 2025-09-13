@@ -1,4 +1,4 @@
-// Serviço Pexels - Otimizado para palavras-chave
+// Serviço Pexels usando searchKeywords
 const PEXELS_API_KEY = process.env.REACT_APP_PEXELS_API_KEY;
 const PEXELS_API_BASE = 'https://api.pexels.com/v1';
 
@@ -55,178 +55,81 @@ export const searchPexelsImages = async (query, page = 1, perPage = 9) => {
   }
 };
 
-// Sugerir imagens baseadas em palavras-chave
+// Sugerir imagens usando searchKeywords
 export const suggestPexelsImages = async (conversationData) => {
-  const imageKeywords = conversationData.generatedContent;
+  // Extrair searchKeywords do conteúdo gerado
+  const searchKeywords = conversationData.generatedContent || '';
   
-  // Converter palavras-chave para query de busca
   let searchQuery = '';
   
-  if (imageKeywords && typeof imageKeywords === 'string') {
-    searchQuery = convertKeywordsToSearchQuery(imageKeywords);
-    console.log('🎯 Pexels - Busca baseada em keywords:', searchQuery);
+  if (searchKeywords && typeof searchKeywords === 'string') {
+    searchQuery = processSearchKeywords(searchKeywords);
+    console.log('🎯 Pexels - Usando searchKeywords:', searchQuery);
   } else {
     searchQuery = generateFallbackQuery(conversationData);
-    console.log('🔄 Pexels - Busca fallback:', searchQuery);
+    console.log('🔄 Pexels - Query fallback:', searchQuery);
   }
   
   return await searchPexelsImages(searchQuery, 1, 6);
 };
 
-// Converter palavras-chave em query de busca otimizada para Pexels
-const convertKeywordsToSearchQuery = (keywords) => {
+// Processar searchKeywords para query otimizada
+const processSearchKeywords = (keywords) => {
   if (!keywords || typeof keywords !== 'string') {
-    return 'business professional';
+    return 'business office';
   }
   
-  // Dividir palavras-chave em array
-  const keywordArray = keywords
-    .split(',')
-    .map(k => k.trim())
-    .filter(k => k.length > 0);
+  // Limpar e dividir keywords
+  const cleanKeywords = keywords
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ') // Remove pontuação
+    .replace(/\s+/g, ' ') // Normaliza espaços
+    .trim();
   
-  // Mapear keywords para termos específicos do Pexels
-  const pexelsKeywordMappings = {
-    // Workspace
-    'workspace': 'office workspace',
-    'office': 'modern office',
-    'desk': 'office desk',
-    'laptop': 'laptop computer',
-    'computer': 'computer work',
-    
-    // Profissional  
-    'professional': 'business professional',
-    'business': 'business office',
-    'corporate': 'corporate business',
-    'meeting': 'business meeting',
-    'executive': 'business executive',
-    
-    // Estilo e design
-    'modern': 'modern workspace',
-    'clean': 'clean office',
-    'organized': 'organized workspace',
-    'minimalist': 'minimalist desk',
-    'aesthetic': 'aesthetic workspace',
-    
-    // Objetos específicos
-    'coffee': 'coffee workspace',
-    'notebook': 'notebook desk',
-    'books': 'books study',
-    'plants': 'office plants',
-    'documents': 'business papers',
-    'pen': 'writing desk',
-    
-    // Iluminação e ambiente
-    'natural lighting': 'natural light',
-    'bright': 'bright office',
-    'window': 'office window',
-    'sunlight': 'sunlight office',
-    
-    // Cores e materiais
-    'white': 'white office',
-    'wood': 'wooden desk',
-    'wooden': 'wood office',
-    'green': 'plants office',
-    'black': 'modern office',
-    
-    // Tecnologia
-    'technology': 'tech office',
-    'digital': 'digital workspace',
-    'innovation': 'startup office',
-    'startup': 'startup workspace',
-    'tech': 'technology office',
-    
-    // Atividades e setores
-    'learning': 'study workspace',
-    'education': 'education office',
-    'creative': 'creative workspace',
-    'design': 'design studio',
-    'marketing': 'marketing team',
-    'finance': 'finance office',
-    'consulting': 'business consulting',
-    
-    // Sentimentos/mood
-    'success': 'business success',
-    'motivation': 'motivated workspace',
-    'productivity': 'productive office',
-    'focus': 'focused work',
-    'collaboration': 'team collaboration'
-  };
-  
-  // Mapear keywords para termos melhores
-  const mappedTerms = keywordArray.map(keyword => {
-    const lowerKeyword = keyword.toLowerCase();
-    return pexelsKeywordMappings[lowerKeyword] || keyword;
-  });
-  
-  // Priorizar termos mais específicos e relevantes
-  const priorityTerms = mappedTerms.filter(term => 
-    term.includes('office') || 
-    term.includes('business') || 
-    term.includes('workspace') ||
-    term.includes('professional')
-  );
-  
-  // Se temos termos prioritários, usar eles primeiro
-  if (priorityTerms.length > 0) {
-    return priorityTerms.slice(0, 2).join(' ');
+  // Se está vazio após limpeza
+  if (!cleanKeywords) {
+    return 'business office';
   }
   
-  // Senão, usar os primeiros termos mapeados
-  if (mappedTerms.length > 0) {
-    return mappedTerms.slice(0, 2).join(' ');
+  // Dividir em palavras individuais
+  const wordArray = cleanKeywords.split(' ').filter(word => word.length > 2);
+  
+  // Se tem poucas palavras, usar todas
+  if (wordArray.length <= 3) {
+    return wordArray.join(' ');
   }
   
-  return 'business professional workspace';
+  // Se tem muitas palavras, pegar as 3 primeiras
+  return wordArray.slice(0, 3).join(' ');
 };
 
-// Gerar query de fallback baseada na conversa
+// Gerar query fallback baseada na conversa
 const generateFallbackQuery = (conversationData) => {
   const platform = conversationData.platform?.replace(/[📸👥💼🐦]/g, '').trim() || 'Instagram';
   const objective = conversationData.objective || '';
-  const audience = conversationData.audience || '';
   
-  // Mapear objetivos para queries específicas do Pexels
+  // Mapear objetivos para queries Pexels
   const objectiveQueries = {
-    'Vender produto/serviço': 'business presentation sales',
-    'Aumentar engajamento': 'social media workspace',
-    'Educar audiência': 'education learning office',
-    'Inspirar pessoas': 'success motivation business',
-    'Criar buzz': 'creative modern workspace'
+    'Vender produto/serviço': 'business presentation',
+    'Aumentar engajamento': 'creative workspace',
+    'Educar audiência': 'learning office',
+    'Inspirar pessoas': 'success workspace',
+    'Criar buzz': 'modern trendy'
   };
   
-  // Mapear audiências para contextos visuais
-  const audienceQueries = {
-    'empreendedor': 'startup entrepreneur',
-    'profissional': 'business professional',
-    'executivo': 'executive office',
-    'freelancer': 'freelance workspace',
-    'consultor': 'consulting business'
-  };
-  
-  // Mapear plataformas para estilos visuais
+  // Mapear plataformas para estilos
   const platformQueries = {
-    'Instagram': 'lifestyle business',
-    'Facebook': 'social business',
+    'Instagram': 'lifestyle aesthetic',
+    'Facebook': 'social authentic',
     'LinkedIn': 'professional corporate',
-    'Twitter': 'simple business'
+    'Twitter': 'simple clean'
   };
   
-  let query = objectiveQueries[objective] || 'business office';
+  const baseQuery = objectiveQueries[objective] || 'business office';
+  const platformQuery = platformQueries[platform] || 'professional';
   
-  // Adicionar contexto da audiência
-  for (const [audienceType, audienceQuery] of Object.entries(audienceQueries)) {
-    if (audience.toLowerCase().includes(audienceType)) {
-      query = audienceQuery + ' ' + query;
-      break;
-    }
-  }
-  
-  // Adicionar estilo da plataforma
-  const platformQuery = platformQueries[platform] || 'business';
-  query = `${query} ${platformQuery}`;
-  
-  return query;
+  return `${baseQuery} ${platformQuery}`;
 };
 
 // Buscar imagens curadas do Pexels

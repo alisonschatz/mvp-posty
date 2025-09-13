@@ -1,4 +1,4 @@
-// Integração com GPT-4 e geração de conteúdo + descrição de imagem
+// Serviço de IA com geração de conteúdo e dupla descrição de imagem
 export const generateContent = async (conversationData) => {
   try {
     const prompt = buildPrompt(conversationData);
@@ -13,14 +13,14 @@ export const generateContent = async (conversationData) => {
         messages: [
           {
             role: "system",
-            content: "Você é um especialista em marketing digital e criação de conteúdo para redes sociais. Crie posts envolventes, autênticos e otimizados para cada plataforma. IMPORTANTE: Responda APENAS com um JSON válido contendo 'content' (texto do post) e 'imageDescription' (descrição detalhada da imagem ideal). Não inclua formatação markdown no conteúdo."
+            content: "Você é um especialista em marketing digital e criação de conteúdo para redes sociais. Crie posts envolventes, autênticos e otimizados para cada plataforma. IMPORTANTE: Responda APENAS com um JSON válido contendo 'content' (texto do post), 'imageDescription' (descrição completa e detalhada para geração de imagem por IA) e 'searchKeywords' (2-5 palavras-chave para busca de imagens). Não inclua formatação markdown."
           },
           {
             role: "user",
             content: prompt
           }
         ],
-        max_tokens: 1500,
+        max_tokens: 2000,
         temperature: 0.7
       })
     });
@@ -35,18 +35,19 @@ export const generateContent = async (conversationData) => {
     const rawResponse = data.choices[0].message.content;
     
     try {
-      // Limpar possíveis caracteres extras do JSON
+      // Limpar e extrair JSON da resposta
       const cleanedResponse = rawResponse.trim();
       const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
       
       if (jsonMatch) {
         const parsedResponse = JSON.parse(jsonMatch[0]);
         
-        // Validar se tem as propriedades necessárias
-        if (parsedResponse.content && parsedResponse.imageDescription) {
+        // Validar se tem todas as propriedades necessárias
+        if (parsedResponse.content && parsedResponse.imageDescription && parsedResponse.searchKeywords) {
           return {
             content: cleanContent(parsedResponse.content),
-            imageDescription: parsedResponse.imageDescription.trim()
+            imageDescription: parsedResponse.imageDescription.trim(),
+            searchKeywords: parsedResponse.searchKeywords
           };
         }
       }
@@ -56,87 +57,64 @@ export const generateContent = async (conversationData) => {
       console.warn('Resposta não está em JSON válido, usando fallback:', parseError);
       console.log('Raw response:', rawResponse);
       
-      // Fallback: tentar extrair conteúdo se estiver misturado
+      // Fallback: extrair conteúdo e gerar descrições
       const fallbackContent = extractContentFromMixedResponse(rawResponse);
       return {
         content: cleanContent(fallbackContent),
-        imageDescription: generateFallbackImageDescription(conversationData)
+        imageDescription: generateFallbackImageDescription(conversationData),
+        searchKeywords: generateFallbackKeywords(conversationData)
       };
     }
   } catch (error) {
     console.error('Erro na API OpenAI:', error);
-    // Fallback para templates se a API falhar
+    // Fallback completo se a API falhar
     const fallbackContent = generateFallback(conversationData);
     return {
       content: fallbackContent,
-      imageDescription: generateFallbackImageDescription(conversationData)
+      imageDescription: generateFallbackImageDescription(conversationData),
+      searchKeywords: generateFallbackKeywords(conversationData)
     };
   }
 };
 
-// Extrair conteúdo de resposta mista (quando não é JSON puro)
-const extractContentFromMixedResponse = (rawResponse) => {
-  try {
-    // Tentar encontrar JSON dentro da resposta
-    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed.content) {
-        return parsed.content;
-      }
-    }
-    
-    // Se não encontrou JSON, usar a resposta como está (removendo possíveis prefixos)
-    return rawResponse
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
-      .replace(/^\s*\{.*?"content":\s*"/i, '')
-      .replace(/",\s*"imageDescription":.*$/i, '')
-      .trim();
-  } catch (error) {
-    // Último recurso: usar resposta raw limpa
-    return rawResponse.trim();
-  }
-};
-
-// Construir prompt otimizado para GPT com geração de descrição de imagem
+// Construir prompt otimizado para gerar conteúdo + dupla descrição
 const buildPrompt = (data) => {
   const platformSpecs = {
     'Instagram': {
       maxLength: '2200 caracteres',
       style: 'Visual e inspirador com storytelling',
       hashtags: '5-10 hashtags relevantes e estratégicos',
-      emojis: 'Use emojis estrategicamente para destacar pontos importantes',
-      format: 'Quebras de linha para facilitar leitura, hooks visuais',
-      engagement: 'Perguntas diretas, calls-to-action para salvar/compartilhar',
-      imageStyle: 'Quadrada (1:1), alta qualidade, visualmente atrativa, lifestyle'
+      emojis: 'Use emojis estrategicamente',
+      format: 'Quebras de linha para facilitar leitura',
+      engagement: 'Perguntas diretas, calls-to-action',
+      imageStyle: 'Quadrada, alta qualidade, lifestyle, visualmente atrativa'
     },
     'Facebook': {
       maxLength: '2000 caracteres',
-      style: 'Conversacional e storytelling, tom mais pessoal',
-      hashtags: '2-5 hashtags no máximo, uso moderado',
-      emojis: 'Use com moderação, foque na narrativa',
-      format: 'Parágrafos bem estruturados, fácil de ler',
+      style: 'Conversacional e storytelling',
+      hashtags: '2-5 hashtags moderados',
+      emojis: 'Use com moderação',
+      format: 'Parágrafos bem estruturados',
       engagement: 'Estimule comentários e discussões',
-      imageStyle: 'Horizontal ou quadrada, storytelling visual, autêntica'
+      imageStyle: 'Storytelling visual, autêntica, horizontal ou quadrada'
     },
     'LinkedIn': {
       maxLength: '3000 caracteres',
       style: 'Profissional mas humano, insights valiosos',
       hashtags: '3-5 hashtags estratégicos do setor',
-      emojis: 'Poucos emojis profissionais quando apropriado',
-      format: 'Estrutura clara com bullet points ou numeração',
-      engagement: 'Perguntas que geram networking e discussão profissional',
-      imageStyle: 'Profissional, limpa, corporativa, horizontal preferível'
+      emojis: 'Poucos emojis profissionais',
+      format: 'Estrutura clara, bullet points',
+      engagement: 'Networking e discussão profissional',
+      imageStyle: 'Profissional, limpa, corporativa, ambiente de negócios'
     },
     'Twitter': {
       maxLength: '280 caracteres',
       style: 'Conciso, direto e impactante',
-      hashtags: '1-3 hashtags principais, máximo eficiência',
-      emojis: '1-2 emojis estratégicos se necessário',
+      hashtags: '1-3 hashtags principais',
+      emojis: '1-2 emojis estratégicos',
       format: 'Texto direto, cada palavra conta',
-      engagement: 'Threads se necessário, retweets e respostas',
-      imageStyle: 'Horizontal, informativa, clara, sem muito texto'
+      engagement: 'Retweets e respostas',
+      imageStyle: 'Horizontal, informativa, clara, sem excesso de elementos'
     }
   };
 
@@ -163,67 +141,126 @@ ESPECIFICAÇÕES DA PLATAFORMA (${platformKey}):
 
 DIRETRIZES CRÍTICAS:
 1. NÃO use formatação markdown (**, *, ##, etc.) - apenas texto limpo
-2. Seja autêntico e genuíno, evite clichês de marketing
+2. Seja autêntico e genuíno, evite clichês
 3. Use gatilhos psicológicos adequados ao objetivo
 4. Inclua call-to-action natural e convincente
 5. Adapte perfeitamente ao tom de voz solicitado
-6. Otimize para máximo engajamento da plataforma específica
+6. Otimize para máximo engajamento da plataforma
 
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
   "content": "Texto completo do post otimizado para a plataforma, incluindo emojis, hashtags e formatação adequada",
-  "imageDescription": "modern office workspace with laptop computer and coffee cup on clean white desk, natural lighting from window, organized environment with plants, professional photography style, no people visible, colors white wood green"
+  "imageDescription": "Descrição completa e detalhada para geração de imagem por IA. Deve incluir: cenário específico, objetos presentes, estilo fotográfico, iluminação, cores dominantes, atmosfera/mood, composição. Use linguagem descritiva rica para IA de imagem como DALL-E. Exemplo: 'Modern minimalist office workspace with sleek laptop computer and white ceramic coffee cup on clean wooden desk, soft natural lighting streaming through large window, organized environment with small green potted plants, professional photography style with shallow depth of field, warm and productive atmosphere, muted color palette of whites and natural wood tones'",
+  "searchKeywords": "2-5 palavras-chave simples e diretas para busca de imagens em bancos como Pexels e Unsplash. Exemplo: 'office workspace modern'"
 }
 
-IMPORTANTE: A imageDescription deve conter apenas palavras-chave separadas por vírgulas para busca de imagens, não frases completas.
+IMPORTANTE: 
+- imageDescription deve ser uma descrição rica e completa (50-150 palavras)
+- searchKeywords deve conter apenas 2-5 palavras-chave separadas por espaços
+- Ambas devem ser relevantes ao conteúdo do post gerado
 
-Crie agora o post e a descrição da imagem ideal:`;
+Crie agora o post completo:`;
 };
 
-// Limpar conteúdo de markdown e formatações
+// Extrair conteúdo de resposta mista (quando não é JSON puro)
+const extractContentFromMixedResponse = (rawResponse) => {
+  try {
+    // Tentar encontrar JSON dentro da resposta
+    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.content) {
+        return parsed.content;
+      }
+    }
+    
+    // Se não encontrou JSON, usar resposta limpa
+    return rawResponse
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .replace(/^\s*\{.*?"content":\s*"/i, '')
+      .replace(/",\s*"imageDescription":.*$/i, '')
+      .trim();
+  } catch (error) {
+    return rawResponse.trim();
+  }
+};
+
+// Limpar conteúdo de markdown
 const cleanContent = (text) => {
   if (!text) return '';
   return text
-    .replace(/\*\*/g, '') // Remove **
-    .replace(/\*/g, '') // Remove *
-    .replace(/#{1,6}\s/g, '') // Remove markdown headers
-    .replace(/`{1,3}/g, '') // Remove code blocks
-    .replace(/---/g, '') // Remove separadores
-    .replace(/^\s*[-*+]\s/gm, '') // Remove bullet points markdown
+    .replace(/\*\*/g, '')
+    .replace(/\*/g, '')
+    .replace(/#{1,6}\s/g, '')
+    .replace(/`{1,3}/g, '')
+    .replace(/---/g, '')
+    .replace(/^\s*[-*+]\s/gm, '')
     .trim();
 };
 
-// Gerar descrição de imagem de fallback
+// Gerar descrição completa de fallback para DALL-E
 const generateFallbackImageDescription = (data) => {
   const platform = data.platform?.replace(/[📸👥💼🐦]/g, '').trim() || 'Instagram';
-  const audience = data.audience || 'professionals';
   const objective = data.objective || '';
+  const audience = data.audience || '';
   
-  // Mapear objetivos para palavras-chave visuais
-  const objectiveToKeywords = {
-    'Vender produto/serviço': 'product, showcase, professional, clean, modern',
-    'Aumentar engajamento': 'vibrant, dynamic, colorful, engaging, lifestyle',
-    'Educar audiência': 'workspace, books, learning, organized, professional',
-    'Inspirar pessoas': 'success, motivation, growth, bright, inspiring',
-    'Criar buzz': 'trendy, modern, bold, creative, innovative'
+  // Descrições base por objetivo
+  const objectiveDescriptions = {
+    'Vender produto/serviço': 'Clean modern workspace showcasing product presentation setup with professional lighting, organized desk environment featuring laptop computer and business materials, minimalist aesthetic with neutral color palette, commercial photography style with high-quality finish',
+    'Aumentar engajamento': 'Vibrant creative workspace with dynamic composition, laptop computer surrounded by colorful design elements, inspiring environment with natural lighting, contemporary aesthetic with bold accent colors, lifestyle photography capturing energy and creativity',
+    'Educar audiência': 'Organized study workspace featuring open books, laptop computer, and learning materials arranged on clean desk, soft natural lighting creating focused atmosphere, educational setting with warm color tones, professional documentation style',
+    'Inspirar pessoas': 'Motivational workspace setup with laptop, success symbols, and inspiring elements, bright natural lighting creating uplifting atmosphere, aspirational environment with clean modern design, empowering mood with warm golden tones',
+    'Criar buzz': 'Trendy modern workspace with contemporary design elements, laptop computer as focal point, cutting-edge aesthetic with dynamic composition, innovative environment with bold visual elements, stylish photography with vibrant energy'
   };
   
-  const baseKeywords = objectiveToKeywords[objective] || 'professional, business, modern, clean';
+  let description = objectiveDescriptions[objective] || 'Modern professional workspace with laptop computer, clean desk setup, natural lighting, organized environment, contemporary business setting with neutral color palette';
   
   // Adaptar por plataforma
-  const platformKeywords = {
-    'Instagram': 'lifestyle, aesthetic, square, beautiful',
-    'Facebook': 'authentic, storytelling, relatable, social',
-    'LinkedIn': 'professional, corporate, business, networking',
-    'Twitter': 'simple, clear, informative, concise'
+  const platformAdaptations = {
+    'Instagram': ', square format composition optimized for social media, aesthetic and lifestyle focused with Instagram-worthy appeal',
+    'Facebook': ', horizontal or square format with authentic storytelling elements, relatable and engaging visual narrative',
+    'LinkedIn': ', professional corporate environment with business-oriented composition, authoritative and trustworthy atmosphere',
+    'Twitter': ', simple clear composition that works well at small sizes, informative and easily readable visual elements'
   };
   
-  const platformWords = platformKeywords[platform] || platformKeywords['Instagram'];
+  description += platformAdaptations[platform] || platformAdaptations['Instagram'];
   
-  return `${baseKeywords}, ${platformWords}, office, workspace, laptop, desk, natural lighting, no people`;
+  // Adicionar especificações técnicas
+  description += ', high-quality professional photography, no text overlay, no logos, no people faces visible, modern aesthetic with clean composition';
+  
+  return description;
 };
 
-// Templates melhorados para fallback
+// Gerar keywords de fallback para busca
+const generateFallbackKeywords = (data) => {
+  const platform = data.platform?.replace(/[📸👥💼🐦]/g, '').trim() || 'Instagram';
+  const objective = data.objective || '';
+  
+  // Keywords base por objetivo
+  const objectiveKeywords = {
+    'Vender produto/serviço': 'business presentation',
+    'Aumentar engajamento': 'creative workspace',
+    'Educar audiência': 'study learning',
+    'Inspirar pessoas': 'success motivation',
+    'Criar buzz': 'modern trendy'
+  };
+  
+  // Keywords por plataforma
+  const platformKeywords = {
+    'Instagram': 'lifestyle aesthetic',
+    'Facebook': 'social authentic',
+    'LinkedIn': 'professional corporate',
+    'Twitter': 'simple clean'
+  };
+  
+  const baseKeywords = objectiveKeywords[objective] || 'business office';
+  const platformWords = platformKeywords[platform] || 'professional';
+  
+  return `${baseKeywords} ${platformWords}`;
+};
+
+// Templates de fallback
 const generateFallback = (data) => {
   const templates = {
     'Instagram': `Você sabia que 90% das pessoas desistem bem na reta final?

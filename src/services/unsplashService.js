@@ -1,4 +1,4 @@
-// Serviço Unsplash - Otimizado para palavras-chave
+// Serviço Unsplash usando searchKeywords
 const UNSPLASH_ACCESS_KEY = process.env.REACT_APP_UNSPLASH_ACCESS_KEY;
 const UNSPLASH_API_BASE = 'https://api.unsplash.com';
 
@@ -60,130 +60,80 @@ export const searchUnsplashImages = async (query, page = 1, perPage = 9) => {
   }
 };
 
-// Sugerir imagens baseadas em palavras-chave
+// Sugerir imagens usando searchKeywords
 export const suggestImagesForPost = async (conversationData) => {
-  const imageKeywords = conversationData.generatedContent;
+  // Extrair searchKeywords do conteúdo gerado
+  const searchKeywords = conversationData.generatedContent || '';
   
-  // Converter palavras-chave para query de busca
   let searchQuery = '';
   
-  if (imageKeywords && typeof imageKeywords === 'string') {
-    searchQuery = convertKeywordsToSearchQuery(imageKeywords);
-    console.log('🎯 Unsplash - Busca baseada em keywords:', searchQuery);
+  if (searchKeywords && typeof searchKeywords === 'string') {
+    searchQuery = processSearchKeywords(searchKeywords);
+    console.log('🎯 Unsplash - Usando searchKeywords:', searchQuery);
   } else {
     searchQuery = generateFallbackQuery(conversationData);
-    console.log('🔄 Unsplash - Busca fallback:', searchQuery);
+    console.log('🔄 Unsplash - Query fallback:', searchQuery);
   }
   
   return await searchUnsplashImages(searchQuery, 1, 6);
 };
 
-// Converter palavras-chave em query de busca otimizada
-const convertKeywordsToSearchQuery = (keywords) => {
+// Processar searchKeywords para query otimizada
+const processSearchKeywords = (keywords) => {
   if (!keywords || typeof keywords !== 'string') {
     return 'business professional';
   }
   
-  // Dividir palavras-chave em array
-  const keywordArray = keywords
-    .split(',')
-    .map(k => k.trim())
-    .filter(k => k.length > 0);
+  // Limpar e processar keywords
+  const cleanKeywords = keywords
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ') // Remove pontuação
+    .replace(/\s+/g, ' ') // Normaliza espaços
+    .trim();
   
-  // Mapear keywords para termos de busca melhores
-  const keywordMappings = {
-    // Workspace
-    'workspace': 'office workspace',
-    'office': 'modern office',
-    'desk': 'office desk',
-    'laptop': 'laptop computer',
-    'computer': 'computer workspace',
-    
-    // Profissional
-    'professional': 'business professional',
-    'business': 'business office',
-    'corporate': 'corporate office',
-    'meeting': 'business meeting',
-    
-    // Estilo
-    'modern': 'modern office',
-    'clean': 'clean workspace',
-    'organized': 'organized desk',
-    'minimalist': 'minimalist office',
-    
-    // Objetos
-    'coffee': 'coffee office',
-    'notebook': 'notebook work',
-    'books': 'books office',
-    'plants': 'office plants',
-    'documents': 'business documents',
-    
-    // Iluminação
-    'natural lighting': 'natural light office',
-    'bright': 'bright office',
-    'window': 'office window',
-    
-    // Cores
-    'white': 'white office',
-    'wood': 'wooden desk',
-    'green': 'green office plants',
-    
-    // Tecnologia
-    'technology': 'technology office',
-    'digital': 'digital workspace',
-    'innovation': 'innovation office',
-    'startup': 'startup office',
-    
-    // Atividades
-    'learning': 'education office',
-    'creative': 'creative workspace',
-    'design': 'design studio',
-    'marketing': 'marketing office'
-  };
-  
-  // Mapear keywords para termos melhores
-  const mappedTerms = keywordArray.map(keyword => {
-    const lowerKeyword = keyword.toLowerCase();
-    return keywordMappings[lowerKeyword] || keyword;
-  });
-  
-  // Pegar os 2-3 termos mais relevantes
-  const relevantTerms = mappedTerms.slice(0, 3);
-  
-  // Se temos termos específicos, usar eles
-  if (relevantTerms.length > 0) {
-    return relevantTerms.join(' ');
+  if (!cleanKeywords) {
+    return 'business professional';
   }
   
-  return 'business professional workspace';
+  // Dividir em palavras e filtrar muito curtas
+  const words = cleanKeywords.split(' ').filter(word => word.length > 2);
+  
+  // Usar até 3 palavras para melhor precisão na busca
+  if (words.length <= 3) {
+    return words.join(' ');
+  }
+  
+  // Pegar as 3 palavras mais relevantes (primeiras)
+  return words.slice(0, 3).join(' ');
 };
 
-// Gerar query de fallback baseada na conversa
+// Gerar query fallback baseada na conversa
 const generateFallbackQuery = (conversationData) => {
   const platform = conversationData.platform?.replace(/[📸👥💼🐦]/g, '').trim() || 'Instagram';
   const objective = conversationData.objective || '';
   
-  // Mapear objetivos para queries
+  // Mapear objetivos para queries Unsplash
   const objectiveQueries = {
-    'Vender produto/serviço': 'business presentation product',
-    'Aumentar engajamento': 'social media lifestyle',
-    'Educar audiência': 'education learning workspace',
-    'Inspirar pessoas': 'success motivation office',
-    'Criar buzz': 'creative modern workspace'
+    'Vender produto/serviço': 'business presentation professional',
+    'Aumentar engajamento': 'creative workspace lifestyle',
+    'Educar audiência': 'learning education office',
+    'Inspirar pessoas': 'success motivation workspace',
+    'Criar buzz': 'modern trendy creative'
   };
   
-  // Mapear plataformas para estilos
+  // Mapear plataformas para contextos visuais
   const platformQueries = {
-    'Instagram': 'lifestyle aesthetic workspace',
-    'Facebook': 'authentic social office',
-    'LinkedIn': 'professional business office',
-    'Twitter': 'simple clean workspace'
+    'Instagram': 'aesthetic lifestyle',
+    'Facebook': 'authentic social',
+    'LinkedIn': 'professional corporate',
+    'Twitter': 'simple clean'
   };
   
-  const objectiveQuery = objectiveQueries[objective] || 'business professional';
-  const platformQuery = platformQueries[platform] || 'professional office';
+  const baseQuery = objectiveQueries[objective] || 'business office professional';
+  const platformContext = platformQueries[platform] || 'professional';
   
-  return `${objectiveQuery} ${platformQuery}`;
+  return `${baseQuery} ${platformContext}`;
 };
 
 // Gerar imagens placeholder
