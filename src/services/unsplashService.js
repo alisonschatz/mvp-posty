@@ -1,4 +1,4 @@
-// Serviço Unsplash - Fotos profissionais gratuitas com busca inteligente
+// Serviço Unsplash - Otimizado para palavras-chave
 const UNSPLASH_ACCESS_KEY = process.env.REACT_APP_UNSPLASH_ACCESS_KEY;
 const UNSPLASH_API_BASE = 'https://api.unsplash.com';
 
@@ -6,7 +6,7 @@ const UNSPLASH_API_BASE = 'https://api.unsplash.com';
 export const searchUnsplashImages = async (query, page = 1, perPage = 9) => {
   try {
     if (!UNSPLASH_ACCESS_KEY) {
-      console.warn('⚠️ Chave do Unsplash não configurada');
+      console.warn('Chave do Unsplash não configurada');
       return generatePlaceholderImages(query, perPage);
     }
 
@@ -55,128 +55,135 @@ export const searchUnsplashImages = async (query, page = 1, perPage = 9) => {
     };
 
   } catch (error) {
-    console.error('❌ Erro ao buscar no Unsplash:', error);
+    console.error('Erro ao buscar no Unsplash:', error);
     return generatePlaceholderImages(query, perPage);
   }
 };
 
-// Sugerir imagens baseadas no conteúdo gerado
+// Sugerir imagens baseadas em palavras-chave
 export const suggestImagesForPost = async (conversationData) => {
-  const generatedContent = conversationData.generatedContent;
+  const imageKeywords = conversationData.generatedContent;
   
-  // Verificar se temos a descrição da imagem do post gerado
+  // Converter palavras-chave para query de busca
   let searchQuery = '';
   
-  if (generatedContent && typeof generatedContent === 'object' && generatedContent.imageDescription) {
-    // Usar a descrição da imagem como base
-    searchQuery = convertImageDescriptionToSearchQuery(generatedContent.imageDescription);
-    console.log('🎯 Busca baseada na descrição da imagem:', searchQuery);
+  if (imageKeywords && typeof imageKeywords === 'string') {
+    searchQuery = convertKeywordsToSearchQuery(imageKeywords);
+    console.log('🎯 Unsplash - Busca baseada em keywords:', searchQuery);
   } else {
-    // Fallback: gerar query baseada no conteúdo textual
-    const content = typeof generatedContent === 'string' 
-      ? generatedContent 
-      : generatedContent?.content || conversationData.content || '';
-    searchQuery = generateIntelligentQuery(content, conversationData);
-    console.log('🔄 Busca baseada no conteúdo textual:', searchQuery);
+    searchQuery = generateFallbackQuery(conversationData);
+    console.log('🔄 Unsplash - Busca fallback:', searchQuery);
   }
   
   return await searchUnsplashImages(searchQuery, 1, 6);
 };
 
-// Converter descrição de imagem para query de busca otimizada
-const convertImageDescriptionToSearchQuery = (imageDescription) => {
-  if (!imageDescription || typeof imageDescription !== 'string') {
+// Converter palavras-chave em query de busca otimizada
+const convertKeywordsToSearchQuery = (keywords) => {
+  if (!keywords || typeof keywords !== 'string') {
     return 'business professional';
   }
   
-  // Extrair palavras-chave principais da descrição
+  // Dividir palavras-chave em array
+  const keywordArray = keywords
+    .split(',')
+    .map(k => k.trim())
+    .filter(k => k.length > 0);
+  
+  // Mapear keywords para termos de busca melhores
   const keywordMappings = {
     // Workspace
-    'workspace|desk|office|computer|laptop': 'workspace office',
-    'modern|contemporary|clean|minimalist': 'modern workspace',
-    'professional|business|corporate': 'professional business',
+    'workspace': 'office workspace',
+    'office': 'modern office',
+    'desk': 'office desk',
+    'laptop': 'laptop computer',
+    'computer': 'computer workspace',
     
-    // Objetos específicos
-    'coffee|cup|mug': 'coffee workspace',
-    'notebook|notes|planning': 'notebook planning',
-    'plants|green|nature': 'office plants',
-    'documents|papers|files': 'business documents',
+    // Profissional
+    'professional': 'business professional',
+    'business': 'business office',
+    'corporate': 'corporate office',
+    'meeting': 'business meeting',
     
-    // Iluminação e atmosfera
-    'natural lighting|window|bright': 'natural light office',
-    'warm|cozy|comfortable': 'cozy workspace',
-    'organized|neat|tidy': 'organized office',
+    // Estilo
+    'modern': 'modern office',
+    'clean': 'clean workspace',
+    'organized': 'organized desk',
+    'minimalist': 'minimalist office',
+    
+    // Objetos
+    'coffee': 'coffee office',
+    'notebook': 'notebook work',
+    'books': 'books office',
+    'plants': 'office plants',
+    'documents': 'business documents',
+    
+    // Iluminação
+    'natural lighting': 'natural light office',
+    'bright': 'bright office',
+    'window': 'office window',
+    
+    // Cores
+    'white': 'white office',
+    'wood': 'wooden desk',
+    'green': 'green office plants',
     
     // Tecnologia
-    'technology|digital|screens': 'technology office',
-    'smartphone|phone|mobile': 'mobile technology',
-    'innovation|futuristic': 'innovation technology',
-    
-    // Cores e estética
-    'white|light|bright': 'bright office',
-    'wood|wooden|natural': 'wooden desk office',
-    'black|dark|contrast': 'modern office',
+    'technology': 'technology office',
+    'digital': 'digital workspace',
+    'innovation': 'innovation office',
+    'startup': 'startup office',
     
     // Atividades
-    'meeting|collaboration|team': 'business meeting',
-    'presentation|display|screen': 'business presentation',
-    'creative|design|art': 'creative workspace',
-    'learning|education|study': 'study workspace'
+    'learning': 'education office',
+    'creative': 'creative workspace',
+    'design': 'design studio',
+    'marketing': 'marketing office'
   };
   
-  const description_lower = imageDescription.toLowerCase();
-  let matchedTerms = [];
+  // Mapear keywords para termos melhores
+  const mappedTerms = keywordArray.map(keyword => {
+    const lowerKeyword = keyword.toLowerCase();
+    return keywordMappings[lowerKeyword] || keyword;
+  });
   
-  for (const [patterns, searchTerm] of Object.entries(keywordMappings)) {
-    const regex = new RegExp(patterns, 'i');
-    if (regex.test(description_lower)) {
-      matchedTerms.push(searchTerm);
-    }
+  // Pegar os 2-3 termos mais relevantes
+  const relevantTerms = mappedTerms.slice(0, 3);
+  
+  // Se temos termos específicos, usar eles
+  if (relevantTerms.length > 0) {
+    return relevantTerms.join(' ');
   }
   
-  // Se encontrou termos específicos, usar os mais relevantes
-  if (matchedTerms.length > 0) {
-    // Remover duplicatas e pegar os 2 primeiros
-    const uniqueTerms = [...new Set(matchedTerms)].slice(0, 2);
-    return uniqueTerms.join(' ');
-  }
-  
-  // Fallback: extrair palavras-chave diretamente
-  const importantWords = imageDescription
-    .toLowerCase()
-    .replace(/[^\w\s]/g, '') // Remove pontuação
-    .split(' ')
-    .filter(word => word.length > 3) // Palavras com mais de 3 caracteres
-    .filter(word => !['with', 'and', 'the', 'for', 'that', 'this', 'from', 'they', 'have', 'been', 'their', 'said', 'each', 'which', 'she', 'do', 'how', 'her', 'has', 'him'].includes(word)); // Remove stop words
-  
-  // Pegar as 3 primeiras palavras relevantes
-  const keywords = importantWords.slice(0, 3).join(' ');
-  
-  return keywords || 'business professional';
+  return 'business professional workspace';
 };
 
-// Gerar query inteligente baseada no conteúdo textual (fallback)
-const generateIntelligentQuery = (content, conversationData) => {
-  const businessKeywords = {
-    'tecnologia|digital|software': 'technology business',
-    'marketing|vendas|cliente': 'marketing team',
-    'equipe|time|colaboração': 'team collaboration',
-    'liderança|gestão|CEO': 'leadership business',
-    'sucesso|crescimento': 'success achievement',
-    'produtividade|trabalho': 'productivity workspace',
-    'educação|aprendizado': 'education learning',
-    'finanças|investimento': 'finance business'
+// Gerar query de fallback baseada na conversa
+const generateFallbackQuery = (conversationData) => {
+  const platform = conversationData.platform?.replace(/[📸👥💼🐦]/g, '').trim() || 'Instagram';
+  const objective = conversationData.objective || '';
+  
+  // Mapear objetivos para queries
+  const objectiveQueries = {
+    'Vender produto/serviço': 'business presentation product',
+    'Aumentar engajamento': 'social media lifestyle',
+    'Educar audiência': 'education learning workspace',
+    'Inspirar pessoas': 'success motivation office',
+    'Criar buzz': 'creative modern workspace'
   };
   
-  const content_lower = content.toLowerCase();
+  // Mapear plataformas para estilos
+  const platformQueries = {
+    'Instagram': 'lifestyle aesthetic workspace',
+    'Facebook': 'authentic social office',
+    'LinkedIn': 'professional business office',
+    'Twitter': 'simple clean workspace'
+  };
   
-  for (const [pattern, term] of Object.entries(businessKeywords)) {
-    if (new RegExp(pattern, 'i').test(content_lower)) {
-      return term;
-    }
-  }
+  const objectiveQuery = objectiveQueries[objective] || 'business professional';
+  const platformQuery = platformQueries[platform] || 'professional office';
   
-  return 'business professional';
+  return `${objectiveQuery} ${platformQuery}`;
 };
 
 // Gerar imagens placeholder
@@ -227,7 +234,7 @@ export const downloadUnsplashImage = async (photo) => {
     
     return photo.urls.regular;
   } catch (error) {
-    console.error('❌ Erro no download:', error);
+    console.error('Erro no download:', error);
     return photo.urls.regular;
   }
 };

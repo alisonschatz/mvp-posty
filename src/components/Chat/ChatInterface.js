@@ -13,7 +13,7 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
   const [isTyping, setIsTyping] = useState(false);
   const [selectedTones, setSelectedTones] = useState([]);
   const [generatedContent, setGeneratedContent] = useState('');
-  const [generatedPost, setGeneratedPost] = useState(null); // Armazena o objeto completo com content + imageDescription
+  const [imageDescription, setImageDescription] = useState('');
   const [postImage, setPostImage] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [conversationData, setConversationData] = useState({});
@@ -28,7 +28,7 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
   
   useEffect(scrollToBottom, [messages]);
 
-  // Função de upload de imagem com useCallback para evitar warning
+  // Função de upload de imagem
   const handleImageUpload = useCallback((event) => {
     const file = event.target.files[0];
     if (file) {
@@ -41,7 +41,7 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
     }
   }, [showNotification]);
 
-  // Configurar o file input - agora com dependência correta
+  // Configurar o file input
   useEffect(() => {
     if (fileInputRef.current) {
       fileInputRef.current.onchange = handleImageUpload;
@@ -138,23 +138,29 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
       try {
         const result = await generateContent(conversationData);
         
-        // Verificar se a resposta é um objeto com content e imageDescription ou apenas string
-        if (typeof result === 'object' && result.content) {
-          setGeneratedPost(result); // Armazena o objeto completo
-          setGeneratedContent(result.content); // Armazena apenas o conteúdo para compatibilidade
-          console.log('📝 Post gerado com descrição de imagem:', result.imageDescription);
+        // Separar corretamente o conteúdo e a descrição
+        if (result && typeof result === 'object') {
+          const postContent = result.content || '';
+          const imgDescription = result.imageDescription || '';
+          
+          // Armazenar separadamente
+          setGeneratedContent(postContent);
+          setImageDescription(imgDescription);
+          
+          console.log('📝 Conteúdo do post:', postContent);
+          console.log('🖼️ Descrição da imagem:', imgDescription);
         } else {
-          // Fallback para compatibilidade
-          const content = typeof result === 'string' ? result : result?.content || result;
+          // Fallback se não for objeto
+          const content = typeof result === 'string' ? result : '';
           setGeneratedContent(content);
-          setGeneratedPost({ content, imageDescription: null });
+          setImageDescription('');
         }
         
         setMessages(prev => [...prev.slice(0, -1), {
           id: Date.now(),
           type: 'ai',
           content: "🎉 **Seu post está pronto!**\n\nOlha só como ficou incrível:",
-          generatedPost: typeof result === 'object' ? result.content : result
+          generatedPost: true // Sinaliza que tem post gerado
         }]);
         
         showNotification('Post gerado com sucesso!');
@@ -228,7 +234,7 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
       {showImageSelector && (
         <ImageSelector
           conversationData={conversationData}
-          generatedContent={generatedPost} // Passa o objeto completo com imageDescription
+          generatedContent={imageDescription} // Passa APENAS a descrição da imagem
           onImageSelect={(imageUrl) => {
             setPostImage(imageUrl);
             showNotification('Imagem adicionada!');

@@ -35,17 +35,31 @@ export const generateContent = async (conversationData) => {
     const rawResponse = data.choices[0].message.content;
     
     try {
-      // Tentar fazer parse do JSON
-      const parsedResponse = JSON.parse(rawResponse);
-      return {
-        content: cleanContent(parsedResponse.content),
-        imageDescription: parsedResponse.imageDescription
-      };
+      // Limpar possíveis caracteres extras do JSON
+      const cleanedResponse = rawResponse.trim();
+      const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+      
+      if (jsonMatch) {
+        const parsedResponse = JSON.parse(jsonMatch[0]);
+        
+        // Validar se tem as propriedades necessárias
+        if (parsedResponse.content && parsedResponse.imageDescription) {
+          return {
+            content: cleanContent(parsedResponse.content),
+            imageDescription: parsedResponse.imageDescription.trim()
+          };
+        }
+      }
+      
+      throw new Error('JSON inválido ou propriedades faltando');
     } catch (parseError) {
-      console.warn('Resposta não está em JSON, usando fallback:', parseError);
-      // Fallback se não for JSON válido
+      console.warn('Resposta não está em JSON válido, usando fallback:', parseError);
+      console.log('Raw response:', rawResponse);
+      
+      // Fallback: tentar extrair conteúdo se estiver misturado
+      const fallbackContent = extractContentFromMixedResponse(rawResponse);
       return {
-        content: cleanContent(rawResponse),
+        content: cleanContent(fallbackContent),
         imageDescription: generateFallbackImageDescription(conversationData)
       };
     }
@@ -57,6 +71,31 @@ export const generateContent = async (conversationData) => {
       content: fallbackContent,
       imageDescription: generateFallbackImageDescription(conversationData)
     };
+  }
+};
+
+// Extrair conteúdo de resposta mista (quando não é JSON puro)
+const extractContentFromMixedResponse = (rawResponse) => {
+  try {
+    // Tentar encontrar JSON dentro da resposta
+    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.content) {
+        return parsed.content;
+      }
+    }
+    
+    // Se não encontrou JSON, usar a resposta como está (removendo possíveis prefixos)
+    return rawResponse
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .replace(/^\s*\{.*?"content":\s*"/i, '')
+      .replace(/",\s*"imageDescription":.*$/i, '')
+      .trim();
+  } catch (error) {
+    // Último recurso: usar resposta raw limpa
+    return rawResponse.trim();
   }
 };
 
@@ -133,11 +172,10 @@ DIRETRIZES CRÍTICAS:
 RESPOSTA OBRIGATÓRIA EM JSON:
 {
   "content": "Texto completo do post otimizado para a plataforma, incluindo emojis, hashtags e formatação adequada",
-  "imageDescription": "Descrição detalhada e específica da imagem ideal para este post. Deve descrever: cenário, pessoas (sem rostos específicos), objetos, cores dominantes, estilo fotográfico, mood/atmosfera, e elementos visuais que complementem perfeitamente o conteúdo. Use linguagem descritiva e específica para IA de geração de imagens."
+  "imageDescription": "modern office workspace with laptop computer and coffee cup on clean white desk, natural lighting from window, organized environment with plants, professional photography style, no people visible, colors white wood green"
 }
 
-EXEMPLO DE imageDescription:
-"Professional workspace with modern laptop, coffee cup, and notebook on clean white desk. Soft natural lighting from window. Minimalist style with plants in background. Warm, productive atmosphere. No people visible, focus on organized workspace setup. Colors: whites, light wood, green plants."
+IMPORTANTE: A imageDescription deve conter apenas palavras-chave separadas por vírgulas para busca de imagens, não frases completas.
 
 Crie agora o post e a descrição da imagem ideal:`;
 };
@@ -161,28 +199,28 @@ const generateFallbackImageDescription = (data) => {
   const audience = data.audience || 'professionals';
   const objective = data.objective || '';
   
-  // Mapear objetivos para estilos visuais
-  const objectiveToVisual = {
-    'Vender produto/serviço': 'Product showcase with professional lighting, clean background, modern aesthetic',
-    'Aumentar engajamento': 'Vibrant, eye-catching scene with dynamic composition, bright colors',
-    'Educar audiência': 'Clean, organized workspace or learning environment, professional setup',
-    'Inspirar pessoas': 'Uplifting scene with natural lighting, aspirational mood, motivational atmosphere',
-    'Criar buzz': 'Dynamic, trending aesthetic with bold colors and modern composition'
+  // Mapear objetivos para palavras-chave visuais
+  const objectiveToKeywords = {
+    'Vender produto/serviço': 'product, showcase, professional, clean, modern',
+    'Aumentar engajamento': 'vibrant, dynamic, colorful, engaging, lifestyle',
+    'Educar audiência': 'workspace, books, learning, organized, professional',
+    'Inspirar pessoas': 'success, motivation, growth, bright, inspiring',
+    'Criar buzz': 'trendy, modern, bold, creative, innovative'
   };
   
-  const baseDescription = objectiveToVisual[objective] || 'Professional business setting with clean, modern aesthetic';
+  const baseKeywords = objectiveToKeywords[objective] || 'professional, business, modern, clean';
   
   // Adaptar por plataforma
-  const platformAdaptations = {
-    'Instagram': 'Square format, lifestyle photography style, Instagram-worthy composition',
-    'Facebook': 'Authentic, relatable scene that tells a story, horizontal or square format',
-    'LinkedIn': 'Professional corporate environment, business setting, clean and authoritative',
-    'Twitter': 'Clear, simple composition that works at small sizes, horizontal format'
+  const platformKeywords = {
+    'Instagram': 'lifestyle, aesthetic, square, beautiful',
+    'Facebook': 'authentic, storytelling, relatable, social',
+    'LinkedIn': 'professional, corporate, business, networking',
+    'Twitter': 'simple, clear, informative, concise'
   };
   
-  const platformStyle = platformAdaptations[platform] || platformAdaptations['Instagram'];
+  const platformWords = platformKeywords[platform] || platformKeywords['Instagram'];
   
-  return `${baseDescription}. ${platformStyle}. Target audience: ${audience}. Natural lighting, high quality, no text overlay, no people's faces, professional photography style.`;
+  return `${baseKeywords}, ${platformWords}, office, workspace, laptop, desk, natural lighting, no people`;
 };
 
 // Templates melhorados para fallback

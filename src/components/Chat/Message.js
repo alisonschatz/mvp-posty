@@ -1,6 +1,6 @@
-import React from 'react';
-import { Bot, User, Edit3, Copy, Download, Sparkles, RefreshCw, Image } from 'lucide-react';
-import PostPreview from '../Previews/PostPreview';
+import React, { useState } from 'react';
+import { Bot, User, Eye, Copy, Sparkles, RefreshCw } from 'lucide-react';
+import PostPreviewModal from '../ui/PostPreviewModal';
 
 const Message = ({
   message,
@@ -20,6 +20,7 @@ const Message = ({
   onRestart,
   onSuggestImages
 }) => {
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const isAI = message.type === 'ai';
 
   const renderMessageContent = () => {
@@ -68,62 +69,95 @@ const Message = ({
 
     return (
       <div className="mt-6 border-t pt-4">
-        <div className="mb-4">
-          <p className="text-sm text-gray-600 mb-3 text-center">
-            Preview - {conversationData.platform?.replace(/[📸👥💼🐦]/g, '').trim()}
-          </p>
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <PostPreview
-              platform={conversationData.platform}
-              content={generatedContent}
-              image={postImage}
-              isEditing={isEditing}
-              onContentChange={onContentChange}
-              onImageEdit={onImageEdit}
-              onImageUpload={onImageUpload}
-            />
+        {/* Preview compacto */}
+        <div className="bg-gray-50 rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h4 className="font-medium text-gray-900">Seu post está pronto!</h4>
+              <p className="text-sm text-gray-600">
+                {conversationData.platform?.replace(/[📸👥💼🐦]/g, '').trim()} • {generatedContent?.length || 0} caracteres
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {postImage && (
+                <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-200">
+                  <img src={postImage} alt="Preview" className="w-full h-full object-cover" />
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Texto truncado */}
+          <div className="text-sm text-gray-800 mb-3">
+            {generatedContent?.length > 150 
+              ? generatedContent.substring(0, 150) + '...'
+              : generatedContent
+            }
           </div>
         </div>
         
-        <div className="grid grid-cols-2 gap-3 mt-4">
+        {/* Ações principais */}
+        <div className="grid grid-cols-2 gap-3 mb-3">
           <button
-            onClick={onEditToggle}
-            className="flex items-center justify-center gap-2 bg-gray-600 text-white py-2 px-3 rounded-lg hover:bg-gray-700 transition-colors text-sm"
+            onClick={() => setShowPreviewModal(true)}
+            className="flex items-center justify-center gap-2 bg-blue-500 text-white py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors"
           >
-            <Edit3 className="w-4 h-4" />
-            {isEditing ? 'Salvar' : 'Editar'}
+            <Eye className="w-4 h-4" />
+            Ver Preview
           </button>
           <button
             onClick={onCopyContent}
-            className="flex items-center justify-center gap-2 bg-orange-500 text-white py-2 px-3 rounded-lg hover:bg-orange-600 transition-colors text-sm"
+            className="flex items-center justify-center gap-2 bg-orange-500 text-white py-3 px-4 rounded-lg hover:bg-orange-600 transition-colors"
           >
             <Copy className="w-4 h-4" />
             Copiar
           </button>
-          <button
-            onClick={onSuggestImages}
-            className="flex items-center justify-center gap-2 bg-blue-500 text-white py-2 px-3 rounded-lg hover:bg-blue-600 transition-colors text-sm"
-          >
-            <Image className="w-4 h-4" />
-            Sugerir Imagens
-          </button>
-          {postImage && (
-            <button
-              onClick={onDownloadImage}
-              className="flex items-center justify-center gap-2 bg-green-500 text-white py-2 px-3 rounded-lg hover:bg-green-600 transition-colors text-sm"
-            >
-              <Download className="w-4 h-4" />
-              Baixar
-            </button>
-          )}
-          <button
-            onClick={onRestart}
-            className="flex items-center justify-center gap-2 bg-gray-500 text-white py-2 px-3 rounded-lg hover:bg-gray-600 transition-colors text-sm col-span-2"
-          >
-            <Sparkles className="w-4 h-4" />
-            Novo Post
-          </button>
         </div>
+
+        {/* Ação secundária */}
+        <button
+          onClick={onRestart}
+          className="w-full flex items-center justify-center gap-2 bg-gray-500 text-white py-2 px-3 rounded-lg hover:bg-gray-600 transition-colors text-sm"
+        >
+          <Sparkles className="w-4 h-4" />
+          Criar Novo Post
+        </button>
+
+        {/* Modal de Preview */}
+        <PostPreviewModal
+          isOpen={showPreviewModal}
+          onClose={() => setShowPreviewModal(false)}
+          platform={conversationData.platform}
+          content={generatedContent}
+          image={postImage}
+          isEditing={isEditing}
+          onContentChange={onContentChange}
+          onEditToggle={onEditToggle}
+          onImageEdit={() => {
+            setShowPreviewModal(false);
+            onImageEdit();
+          }}
+          onImageUpload={() => {
+            setShowPreviewModal(false);
+            onImageUpload();
+          }}
+          onCopyContent={() => {
+            onCopyContent();
+            setShowPreviewModal(false);
+          }}
+          onDownloadImage={() => {
+            onDownloadImage();
+            setShowPreviewModal(false);
+          }}
+          onRestart={() => {
+            setShowPreviewModal(false);
+            onRestart();
+          }}
+          onSuggestImages={() => {
+            setShowPreviewModal(false);
+            onSuggestImages();
+          }}
+        />
       </div>
     );
   };
