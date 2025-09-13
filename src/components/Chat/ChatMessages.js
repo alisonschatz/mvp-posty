@@ -10,6 +10,7 @@ const ChatMessages = ({
   postImage,
   isEditing,
   conversationData,
+  imageDescription,
   messagesEndRef,
   onUserResponse,
   onConfirmToneSelection,
@@ -20,7 +21,8 @@ const ChatMessages = ({
   onCopyContent,
   onDownloadImage,
   onRestart,
-  onSuggestImages
+  onSuggestImages,
+  onImageSelect
 }) => {
   return (
     <div className="flex-1 p-6 overflow-y-auto max-h-[500px]">
@@ -33,6 +35,7 @@ const ChatMessages = ({
           postImage={postImage}
           isEditing={isEditing}
           conversationData={conversationData}
+          imageDescription={imageDescription}
           onUserResponse={onUserResponse}
           onConfirmToneSelection={onConfirmToneSelection}
           onContentChange={onContentChange}
@@ -43,6 +46,7 @@ const ChatMessages = ({
           onDownloadImage={onDownloadImage}
           onRestart={onRestart}
           onSuggestImages={onSuggestImages}
+          onImageSelect={onImageSelect}
         />
       ))}
       

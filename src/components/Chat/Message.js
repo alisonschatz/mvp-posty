@@ -9,6 +9,7 @@ const Message = ({
   postImage,
   isEditing,
   conversationData,
+  imageDescription,
   onUserResponse,
   onConfirmToneSelection,
   onContentChange,
@@ -18,12 +19,16 @@ const Message = ({
   onCopyContent,
   onDownloadImage,
   onRestart,
-  onSuggestImages
+  onSuggestImages,
+  onImageSelect
 }) => {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const isAI = message.type === 'ai';
 
+  // Renderizar conteúdo da mensagem com formatação
   const renderMessageContent = () => {
+    if (!message.content) return null;
+    
     return message.content.split('**').map((part, i) => 
       i % 2 === 0 ? (
         <span key={i} className="leading-relaxed">{part}</span>
@@ -33,6 +38,7 @@ const Message = ({
     );
   };
 
+  // Renderizar opções de resposta
   const renderOptions = () => {
     if (!message.options || message.generatedPost) return null;
 
@@ -43,7 +49,7 @@ const Message = ({
             key={i}
             onClick={() => onUserResponse(option, true)}
             className={`px-3 py-2 rounded-full text-sm font-medium transition-all ${
-              message.multiSelect && selectedTones.includes(option)
+              message.multiSelect && selectedTones?.includes(option)
                 ? 'bg-orange-500 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
@@ -52,7 +58,7 @@ const Message = ({
           </button>
         ))}
         
-        {message.multiSelect && selectedTones.length > 0 && (
+        {message.multiSelect && selectedTones?.length > 0 && (
           <button
             onClick={onConfirmToneSelection}
             className="px-4 py-2 bg-orange-500 text-white rounded-full text-sm font-medium hover:bg-orange-600 transition-all"
@@ -64,6 +70,7 @@ const Message = ({
     );
   };
 
+  // Renderizar post gerado
   const renderGeneratedPost = () => {
     if (!message.generatedPost) return null;
 
@@ -75,23 +82,27 @@ const Message = ({
             <div>
               <h4 className="font-medium text-gray-900">Seu post está pronto!</h4>
               <p className="text-sm text-gray-600">
-                {conversationData.platform?.replace(/[📸👥💼🐦]/g, '').trim()} • {generatedContent?.length || 0} caracteres
+                {conversationData?.platform?.replace(/[📸👥💼🐦]/g, '').trim() || 'Rede Social'} • {generatedContent?.length || 0} caracteres
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              {postImage && (
+            {postImage && (
+              <div className="flex items-center gap-2">
                 <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-200">
-                  <img src={postImage} alt="Preview" className="w-full h-full object-cover" />
+                  <img 
+                    src={postImage} 
+                    alt="Preview" 
+                    className="w-full h-full object-cover" 
+                  />
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
           
           {/* Texto truncado */}
           <div className="text-sm text-gray-800 mb-3">
-            {generatedContent?.length > 150 
+            {generatedContent && generatedContent.length > 150 
               ? generatedContent.substring(0, 150) + '...'
-              : generatedContent
+              : generatedContent || 'Conteúdo do post aparecerá aqui'
             }
           </div>
         </div>
@@ -124,44 +135,31 @@ const Message = ({
         </button>
 
         {/* Modal de Preview */}
-        <PostPreviewModal
-          isOpen={showPreviewModal}
-          onClose={() => setShowPreviewModal(false)}
-          platform={conversationData.platform}
-          content={generatedContent}
-          image={postImage}
-          isEditing={isEditing}
-          onContentChange={onContentChange}
-          onEditToggle={onEditToggle}
-          onImageEdit={() => {
-            setShowPreviewModal(false);
-            onImageEdit();
-          }}
-          onImageUpload={() => {
-            setShowPreviewModal(false);
-            onImageUpload();
-          }}
-          onCopyContent={() => {
-            onCopyContent();
-            setShowPreviewModal(false);
-          }}
-          onDownloadImage={() => {
-            onDownloadImage();
-            setShowPreviewModal(false);
-          }}
-          onRestart={() => {
-            setShowPreviewModal(false);
-            onRestart();
-          }}
-          onSuggestImages={() => {
-            setShowPreviewModal(false);
-            onSuggestImages();
-          }}
-        />
+        {showPreviewModal && (
+          <PostPreviewModal
+            isOpen={showPreviewModal}
+            onClose={() => setShowPreviewModal(false)}
+            platform={conversationData?.platform}
+            content={generatedContent}
+            image={postImage}
+            isEditing={isEditing}
+            conversationData={conversationData}
+            imageDescription={imageDescription}
+            onContentChange={onContentChange}
+            onEditToggle={onEditToggle}
+            onImageEdit={onImageEdit}
+            onImageUpload={onImageUpload}
+            onCopyContent={onCopyContent}
+            onDownloadImage={onDownloadImage}
+            onRestart={onRestart}
+            onImageSelect={onImageSelect}
+          />
+        )}
       </div>
     );
   };
 
+  // Renderizar ações de erro
   const renderErrorActions = () => {
     if (!message.hasError) return null;
 
@@ -178,12 +176,14 @@ const Message = ({
 
   return (
     <div className={`flex gap-4 mb-6 ${isAI ? '' : 'flex-row-reverse'}`}>
+      {/* Avatar */}
       <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
         isAI ? 'bg-orange-500' : 'bg-gray-600'
       }`}>
         {isAI ? <Bot className="w-4 h-4 text-white" /> : <User className="w-4 h-4 text-white" />}
       </div>
       
+      {/* Conteúdo da mensagem */}
       <div className={`flex-1 ${isAI ? 'mr-16' : 'ml-16'}`}>
         <div className={`rounded-2xl p-4 ${
           isAI 
@@ -199,6 +199,7 @@ const Message = ({
           {renderErrorActions()}
         </div>
         
+        {/* Timestamp */}
         <div className={`text-xs text-gray-400 mt-2 ${isAI ? '' : 'text-right'}`}>
           {isAI ? 'Posty' : 'Você'} • agora
         </div>

@@ -7,28 +7,38 @@ import { conversationFlow } from '../../utils/conversationFlow';
 import { generateContent } from '../../services/aiService';
 
 const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
+  // Estados principais
   const [messages, setMessages] = useState([]);
   const [currentInput, setCurrentInput] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
   const [selectedTones, setSelectedTones] = useState([]);
+  
+  // Estados do post gerado
   const [generatedContent, setGeneratedContent] = useState('');
   const [imageDescription, setImageDescription] = useState('');
   const [postImage, setPostImage] = useState(null);
+  
+  // Estados de interface
   const [isGenerating, setIsGenerating] = useState(false);
-  const [conversationData, setConversationData] = useState({});
   const [isEditing, setIsEditing] = useState(false);
   const [showImageSelector, setShowImageSelector] = useState(false);
   
+  // Estados da conversa
+  const [conversationData, setConversationData] = useState({});
+  
   const messagesEndRef = useRef(null);
 
-  const scrollToBottom = () => {
+  // Auto scroll
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  }, []);
   
-  useEffect(scrollToBottom, [messages]);
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
 
-  // Função de upload de imagem
+  // Upload de imagem
   const handleImageUpload = useCallback((event) => {
     const file = event.target.files[0];
     if (file) {
@@ -41,38 +51,53 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
     }
   }, [showNotification]);
 
-  // Configurar o file input
+  // Configurar file input
   useEffect(() => {
-    if (fileInputRef.current) {
+    if (fileInputRef?.current) {
       fileInputRef.current.onchange = handleImageUpload;
     }
   }, [fileInputRef, handleImageUpload]);
 
   // Inicializar chat
   useEffect(() => {
-    simulateTyping(() => {
-      setMessages([{ id: Date.now(), ...conversationFlow[0] }]);
+    const timer = setTimeout(() => {
+      setIsTyping(true);
+      setTimeout(() => {
+        setIsTyping(false);
+        setMessages([{ id: Date.now(), ...conversationFlow[0] }]);
+      }, 800);
     }, 500);
+    
+    return () => clearTimeout(timer);
   }, []);
 
-  const simulateTyping = (callback, delay = 800) => {
+  // Simular digitação
+  const simulateTyping = useCallback((callback, delay = 800) => {
     setIsTyping(true);
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setIsTyping(false);
       callback();
     }, delay);
-  };
+    return timer;
+  }, []);
 
-  const handleUserResponse = (response, isOption = false) => {
-    const newUserMessage = { id: Date.now(), type: 'user', content: response };
+  // Processar resposta do usuário
+  const handleUserResponse = useCallback((response, isOption = false) => {
+    const newUserMessage = { 
+      id: Date.now(), 
+      type: 'user', 
+      content: response 
+    };
     const currentQuestion = conversationFlow[currentStep];
     
+    // Atualizar dados da conversa
     const newData = { ...conversationData };
     if (currentQuestion) {
       newData[currentQuestion.id] = response;
       setConversationData(newData);
     }
 
+    // Lidar com seleção múltipla de tons
     if (currentQuestion?.id === 'tone' && currentQuestion.multiSelect) {
       if (!isOption) {
         setMessages(prev => [...prev, newUserMessage]);
@@ -97,18 +122,24 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
     }
     
     setCurrentInput('');
-  };
+  }, [conversationData, currentStep, selectedTones]);
 
-  const confirmToneSelection = () => {
+  // Confirmar seleção de tons
+  const confirmToneSelection = useCallback(() => {
     if (selectedTones.length > 0) {
       const response = `Selecionei: ${selectedTones.join(', ')}`;
-      const newUserMessage = { id: Date.now(), type: 'user', content: response };
+      const newUserMessage = { 
+        id: Date.now(), 
+        type: 'user', 
+        content: response 
+      };
       setMessages(prev => [...prev, newUserMessage]);
       proceedToNextStep();
     }
-  };
+  }, [selectedTones]);
 
-  const proceedToNextStep = () => {
+  // Avançar para próximo passo
+  const proceedToNextStep = useCallback(() => {
     const nextStep = currentStep + 1;
     
     if (nextStep >= conversationFlow.length) {
@@ -119,12 +150,16 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
     setCurrentStep(nextStep);
     
     simulateTyping(() => {
-      const nextMessage = { id: Date.now(), ...conversationFlow[nextStep] };
+      const nextMessage = { 
+        id: Date.now(), 
+        ...conversationFlow[nextStep] 
+      };
       setMessages(prev => [...prev, nextMessage]);
     });
-  };
+  }, [currentStep, simulateTyping]);
 
-  const generatePost = async () => {
+  // Gerar post
+  const generatePost = useCallback(async () => {
     setIsGenerating(true);
     
     simulateTyping(async () => {
@@ -138,19 +173,16 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
       try {
         const result = await generateContent(conversationData);
         
-        // Separar corretamente o conteúdo e a descrição
         if (result && typeof result === 'object') {
           const postContent = result.content || '';
           const imgDescription = result.imageDescription || '';
           
-          // Armazenar separadamente
           setGeneratedContent(postContent);
           setImageDescription(imgDescription);
           
           console.log('📝 Conteúdo do post:', postContent);
           console.log('🖼️ Descrição da imagem:', imgDescription);
         } else {
-          // Fallback se não for objeto
           const content = typeof result === 'string' ? result : '';
           setGeneratedContent(content);
           setImageDescription('');
@@ -160,7 +192,7 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
           id: Date.now(),
           type: 'ai',
           content: "🎉 **Seu post está pronto!**\n\nOlha só como ficou incrível:",
-          generatedPost: true // Sinaliza que tem post gerado
+          generatedPost: true
         }]);
         
         showNotification('Post gerado com sucesso!');
@@ -177,11 +209,33 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
         setIsGenerating(false);
       }
     }, 2000);
-  };
+  }, [conversationData, showNotification, simulateTyping]);
 
-  const restart = () => {
+  // Handlers de ações
+  const handleCopyContent = useCallback(() => {
+    navigator.clipboard.writeText(generatedContent);
+    showNotification('Conteúdo copiado!');
+  }, [generatedContent, showNotification]);
+
+  const handleDownloadImage = useCallback(() => {
+    if (postImage) {
+      const link = document.createElement('a');
+      link.href = postImage;
+      link.download = `posty-image-${Date.now()}.jpg`;
+      link.click();
+      showNotification('Download iniciado!');
+    }
+  }, [postImage, showNotification]);
+
+  const handleImageSelect = useCallback((imageUrl) => {
+    setPostImage(imageUrl);
+    setShowImageSelector(false);
+    showNotification('Imagem selecionada!');
+  }, [showNotification]);
+
+  const restart = useCallback(() => {
     onGoHome();
-  };
+  }, [onGoHome]);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -196,28 +250,19 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
           postImage={postImage}
           isEditing={isEditing}
           conversationData={conversationData}
+          imageDescription={imageDescription}
           messagesEndRef={messagesEndRef}
           onUserResponse={handleUserResponse}
           onConfirmToneSelection={confirmToneSelection}
           onContentChange={setGeneratedContent}
           onEditToggle={() => setIsEditing(!isEditing)}
-          onImageEdit={() => fileInputRef.current?.click()}
-          onImageUpload={() => fileInputRef.current?.click()}
-          onCopyContent={() => {
-            navigator.clipboard.writeText(generatedContent);
-            showNotification('Conteúdo copiado!');
-          }}
-          onDownloadImage={() => {
-            if (postImage) {
-              const link = document.createElement('a');
-              link.href = postImage;
-              link.download = `posty-image-${Date.now()}.jpg`;
-              link.click();
-              showNotification('Download iniciado!');
-            }
-          }}
+          onImageEdit={() => fileInputRef?.current?.click()}
+          onImageUpload={() => fileInputRef?.current?.click()}
+          onCopyContent={handleCopyContent}
+          onDownloadImage={handleDownloadImage}
           onRestart={restart}
           onSuggestImages={() => setShowImageSelector(true)}
+          onImageSelect={handleImageSelect}
         />
 
         <ChatInput
@@ -234,12 +279,8 @@ const ChatInterface = ({ onGoHome, showNotification, fileInputRef }) => {
       {showImageSelector && (
         <ImageSelector
           conversationData={conversationData}
-          generatedContent={imageDescription} // Passa APENAS a descrição da imagem
-          onImageSelect={(imageUrl) => {
-            setPostImage(imageUrl);
-            showNotification('Imagem adicionada!');
-            setShowImageSelector(false);
-          }}
+          generatedContent={imageDescription}
+          onImageSelect={handleImageSelect}
           onClose={() => setShowImageSelector(false)}
         />
       )}
